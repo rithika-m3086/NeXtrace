@@ -28,25 +28,37 @@ class PipelineOrchestrator:
         self.state_manager = state_manager
         self.coordinator = coordinator
 
-    async def run_pipeline(self, raw_logs: str, timeout_seconds: int = 120) -> Dict[str, Any]:
+    async def run_pipeline(
+        self,
+        raw_logs: Any,
+        timeout_seconds: int = 120,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Kicks off the multi-agent pipeline and returns the final deliverables.
 
         Args:
-            raw_logs: Unstructured log content input.
+            raw_logs: Unstructured log content input (str) or list of LogSource objects.
             timeout_seconds: Duration to wait before raising TimeoutError.
+            metadata: Optional dictionary of organization metadata.
         """
         run_id = str(uuid4())
         
         # Validate Input Schema
-        input_data = RawEvidenceInput(
-            pipeline_run_id=run_id,
-            log_sources=[
+        if isinstance(raw_logs, list):
+            log_sources = raw_logs
+        else:
+            log_sources = [
                 LogSource(
                     source_name="raw_logs_input",
                     source_type="custom",
-                    content=raw_logs,
+                    content=str(raw_logs),
                 )
-            ],
+            ]
+
+        input_data = RawEvidenceInput(
+            pipeline_run_id=run_id,
+            log_sources=log_sources,
+            metadata=metadata or {},
         )
 
         # Initialize State Contexts
@@ -77,6 +89,7 @@ class PipelineOrchestrator:
 
         def on_postmortem(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
+                self.state_manager.update_stage(run_id, "postmortem_complete", msg.payload)
                 self.state_manager.mark_complete(run_id, msg.payload)
                 result_container["status"] = "completed"
                 result_container["data"] = msg.payload
