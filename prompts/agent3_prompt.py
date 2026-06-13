@@ -42,5 +42,5 @@ def build_prompt(attribution_json: str, agent2_confidence: float) -> str:
         f"{attribution_json}\n\n"
         "Produce the impact assessment JSON now. Identify data_categories_exposed precisely from "
         "the controlled vocabulary — a separate rules engine uses it to determine regulatory "
-        "obligations."
+        "obligations. Note that patient/health records exposure generally involves both 'health' and 'pii' (Personally Identifiable Information) categories."
     )

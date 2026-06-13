@@ -49,7 +49,7 @@ class ComplianceAction(BaseModel):
 
     regulation: str
     action_required: str
-    deadline: str
+    deadline: Optional[str] = "N/A"
     responsible_party: str
 
 
