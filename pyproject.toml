@@ -1,22 +1,7 @@
-HEAD
 [project]
 name = "nextrace"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-    "band-sdk[langgraph]>=1.0.0",
-]
-
-[build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "secpostmortem"
-version = "0.1.0"
-description = "SecPostMortem — Security Incident Intelligence Platform built on Band"
+description = "NeXtrace — Security Incident Intelligence Platform built on Band"
 readme = "README.md"
 authors = [
     { name = "LabLab Hackathon Team" }
@@ -37,6 +22,10 @@ dependencies = [
     "openai"
 ]
 
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q"
@@ -53,4 +42,3 @@ include = '\.pyi?$'
 profile = "black"
 line_length = 88
 multi_line_output = 3
- beb34c3ef569e98ac18f33b8f78f1e0d8bd7cc46
