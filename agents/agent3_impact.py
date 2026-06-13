@@ -1,6 +1,6 @@
 import json
 from agents.base_agent import BaseAgent
-from band.message_types import BandMessage
+from core.message_types import BandMessage
 from schemas.impact_schema import ImpactAssessment, ComplianceFlag
 from pipeline.state_manager import PipelineStateManager
 from utils.compliance_rules import evaluate as evaluate_compliance

@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import os
 from typing import Any, Callable, Dict, List, Optional
-from band.message_types import BandMessage
+from core.message_types import BandMessage
 from utils.logger import get_logger
 
 # Import Thenvoi classes safely

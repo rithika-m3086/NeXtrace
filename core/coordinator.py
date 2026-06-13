@@ -1,7 +1,7 @@
 import time
 from typing import Dict, Any, Optional
-from band.channels import BandChannel
-from band.message_types import BandMessage
+from core.channels import BandChannel
+from core.message_types import BandMessage
 from utils.logger import get_logger
 
 
