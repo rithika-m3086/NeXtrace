@@ -59,8 +59,8 @@ NeXtrace builds a highly reliable, structured multi-agent pipeline using a role-
 
 | Day | What We Shipped |
 |-----|----------------|
-| **01** | *[Add day 1 details here]* |
-| **02** | *[Add day 2 details here]* |
+| **01** | 🏗️ Scaffolding & Core Architecture: Initialized folder structure, JSON structured logger, Band communication layer in `core/` (channels, coordinator, Mock + Live Thenvoi clients, `BandMessage` envelope), five Pydantic schemas, `base_agent` with self-correcting JSON extraction & single-retry guard, deterministic compliance rules engine, orchestrator, state manager, and unit/integration test suites. |
+| **02** | 🗃️ Realistic Log Fixtures & E2E Validation: Created three correlated mock log fixtures (GitHub, CloudTrail, S3 Access) in `data/sample_logs/` for the API key leak scenario · Developed end-to-end scenario runner `scripts/run_scenario.py` · Verified multi-agent pipeline and tuned prompts to trigger GDPR, CCPA, HIPAA, and SOC2 alerts. |
 | **03** | *[Add day 3 details here]* |
 | **04** | *[Add day 4 details here]* |
 | **05** | *[Add day 5 details here]* |
@@ -203,7 +203,7 @@ NeXtrace/
 │   └── agent4_postmortem.py # Compiles professional post-mortem and remediation tasks
 ├── assets/                  # Images and logos
 │   └── codeblooded_logo.jpg # Team CodeBlooded logo
-├── band/                    # Communication bus wrapper and coordinator
+├── core/                    # Communication bus wrapper and coordinator
 │   ├── channels.py          # BandChannel definitions
 │   ├── client.py            # BandClient & MockBandClient implementations
 │   ├── coordinator.py       # Manages async subscribers and pipeline execution
