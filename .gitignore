@@ -1,3 +1,4 @@
+HEAD
 # Environment and secrets
 .env
 agent_config.yaml
@@ -15,3 +16,25 @@ outputs/*
 
 # Editor
 .cursor/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments and Secrets
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+ beb34c3ef569e98ac18f33b8f78f1e0d8bd7cc46
