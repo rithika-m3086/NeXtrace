@@ -1,0 +1,17 @@
+# Environment and secrets
+.env
+agent_config.yaml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Outputs
+outputs/*
+!outputs/.gitkeep
+
+# Editor
+.cursor/
