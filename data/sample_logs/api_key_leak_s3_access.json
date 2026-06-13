@@ -1,0 +1,40 @@
+[
+  {
+    "bucket_owner": "123456789012",
+    "bucket": "nextrace-patient-health-records",
+    "time": "2026-06-13T04:40:00Z",
+    "remote_ip": "198.51.100.42",
+    "requester": "arn:aws:iam::123456789012:user/dev-dhanush",
+    "request_id": "S3REQ12345AAAAAA",
+    "operation": "REST.GET.OBJECT",
+    "key": "exfiltrated/patients/records/patient_history_2026_01.csv",
+    "request_uri": "GET /exfiltrated/patients/records/patient_history_2026_01.csv HTTP/1.1",
+    "http_status": 200,
+    "error_code": "-",
+    "bytes_sent": 1504500,
+    "object_size": 1504500,
+    "total_time": 150,
+    "referrer": "-",
+    "user_agent": "aws-cli/2.15.15 Python/3.11.8 Windows/10",
+    "version_id": "-"
+  },
+  {
+    "bucket_owner": "123456789012",
+    "bucket": "nextrace-patient-health-records",
+    "time": "2026-06-13T04:42:00Z",
+    "remote_ip": "198.51.100.42",
+    "requester": "arn:aws:iam::123456789012:user/dev-dhanush",
+    "request_id": "S3REQ12345BBBBBB",
+    "operation": "REST.GET.OBJECT",
+    "key": "exfiltrated/patients/records/patient_history_2026_02.csv",
+    "request_uri": "GET /exfiltrated/patients/records/patient_history_2026_02.csv HTTP/1.1",
+    "http_status": 200,
+    "error_code": "-",
+    "bytes_sent": 2100800,
+    "object_size": 2100800,
+    "total_time": 180,
+    "referrer": "-",
+    "user_agent": "aws-cli/2.15.15 Python/3.11.8 Windows/10",
+    "version_id": "-"
+  }
+]
