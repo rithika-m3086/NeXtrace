@@ -1,0 +1,89 @@
+{
+  "Records": [
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {
+        "type": "IAMUser",
+        "principalId": "AIDA2V3XE87EXAMPLE",
+        "arn": "arn:aws:iam::123456789012:user/dev-dhanush",
+        "accountId": "123456789012",
+        "accessKeyId": "AKIA2V3XE87EXAMPLE",
+        "userName": "dev-dhanush"
+      },
+      "eventTime": "2026-06-13T04:22:00Z",
+      "eventSource": "sts.amazonaws.com",
+      "eventName": "GetCallerIdentity",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "198.51.100.42",
+      "userAgent": "aws-cli/2.15.15 Python/3.11.8 Windows/10",
+      "requestParameters": null,
+      "responseElements": {
+        "Arn": "arn:aws:iam::123456789012:user/dev-dhanush",
+        "UserId": "AIDA2V3XE87EXAMPLE",
+        "Account": "123456789012"
+      },
+      "requestID": "req-11111-aaaaa",
+      "eventID": "evt-11111-bbbbb",
+      "readOnly": true,
+      "eventType": "AwsApiCall",
+      "managementEvent": true,
+      "recipientAccountId": "123456789012",
+      "eventCategory": "Management"
+    },
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {
+        "type": "IAMUser",
+        "principalId": "AIDA2V3XE87EXAMPLE",
+        "arn": "arn:aws:iam::123456789012:user/dev-dhanush",
+        "accountId": "123456789012",
+        "accessKeyId": "AKIA2V3XE87EXAMPLE",
+        "userName": "dev-dhanush"
+      },
+      "eventTime": "2026-06-13T04:25:00Z",
+      "eventSource": "s3.amazonaws.com",
+      "eventName": "ListBuckets",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "198.51.100.42",
+      "userAgent": "aws-cli/2.15.15 Python/3.11.8 Windows/10",
+      "requestParameters": null,
+      "responseElements": null,
+      "requestID": "req-22222-ccccc",
+      "eventID": "evt-22222-ddddd",
+      "readOnly": true,
+      "eventType": "AwsApiCall",
+      "managementEvent": true,
+      "recipientAccountId": "123456789012",
+      "eventCategory": "Management"
+    },
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {
+        "type": "IAMUser",
+        "principalId": "AIDA2V3XE87EXAMPLE",
+        "arn": "arn:aws:iam::123456789012:user/dev-dhanush",
+        "accountId": "123456789012",
+        "accessKeyId": "AKIA2V3XE87EXAMPLE",
+        "userName": "dev-dhanush"
+      },
+      "eventTime": "2026-06-13T04:28:00Z",
+      "eventSource": "s3.amazonaws.com",
+      "eventName": "GetBucketLocation",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "198.51.100.42",
+      "userAgent": "aws-cli/2.15.15 Python/3.11.8 Windows/10",
+      "requestParameters": {
+        "bucketName": "nextrace-patient-health-records",
+        "Host": "s3.amazonaws.com"
+      },
+      "responseElements": null,
+      "requestID": "req-33333-eeeee",
+      "eventID": "evt-33333-ffffff",
+      "readOnly": true,
+      "eventType": "AwsApiCall",
+      "managementEvent": true,
+      "recipientAccountId": "123456789012",
+      "eventCategory": "Management"
+    }
+  ]
+}
