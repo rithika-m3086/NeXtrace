@@ -3,8 +3,8 @@ import pytest
 import asyncio
 from unittest.mock import patch
 
-from band.client import BandClient
-from band.coordinator import BandCoordinator
+from core.client import BandClient
+from core.coordinator import BandCoordinator
 from pipeline.state_manager import PipelineStateManager
 from pipeline.orchestrator import PipelineOrchestrator
 

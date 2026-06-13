@@ -2,9 +2,9 @@ import asyncio
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from band.client import BandClient
-from band.message_types import BandMessage
-from band.coordinator import BandCoordinator
+from core.client import BandClient
+from core.message_types import BandMessage
+from core.coordinator import BandCoordinator
 from pipeline.state_manager import PipelineStateManager
 from schemas.input_schema import RawEvidenceInput, LogSource
 

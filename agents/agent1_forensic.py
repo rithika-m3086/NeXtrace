@@ -1,5 +1,5 @@
 from agents.base_agent import BaseAgent
-from band.message_types import BandMessage
+from core.message_types import BandMessage
 from schemas.timeline_schema import ForensicTimeline
 import prompts.agent1_prompt as prompt_mod
 

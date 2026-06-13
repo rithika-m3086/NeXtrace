@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional, Type
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
-from band.client import BandClient
-from band.message_types import BandMessage
+from core.client import BandClient
+from core.message_types import BandMessage
 from utils.logger import get_logger
 
 

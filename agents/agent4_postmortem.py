@@ -1,6 +1,6 @@
 import json
 from agents.base_agent import BaseAgent
-from band.message_types import BandMessage
+from core.message_types import BandMessage
 from schemas.postmortem_schema import PostMortemReport
 from pipeline.state_manager import PipelineStateManager
 import prompts.agent4_prompt as prompt_mod

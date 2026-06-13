@@ -1,9 +1,9 @@
 import time
 import pytest
-from band.client import BandClient, BandClientError
-from band.coordinator import BandCoordinator, PipelineTimeoutError
-from band.channels import BandChannel
-from band.message_types import BandMessage
+from core.client import BandClient, BandClientError
+from core.coordinator import BandCoordinator, PipelineTimeoutError
+from core.channels import BandChannel
+from core.message_types import BandMessage
 
 
 def test_band_client_mode_detection():
