@@ -30,6 +30,7 @@ class AttackAttributionAgent(BaseAgent):
             prompt=prompt,
             response_model=AttributionReport,
             system_prompt=system_prompt,
+            run_id=input_message.pipeline_run_id,
         )
 
         self.logger.info(

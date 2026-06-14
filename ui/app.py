@@ -35,6 +35,18 @@ SCENARIOS: Dict[str, List[Dict[str, str]]] = {
         {"file": "api_key_leak_cloudtrail.json", "source_name": "cloudtrail", "source_type": "cloudtrail"},
         {"file": "api_key_leak_s3_access.json", "source_name": "s3_access", "source_type": "s3_access"},
     ],
+    "Sparse Logs (Insufficient Evidence)": [
+        {"file": "sparse_logs.json", "source_name": "cloudtrail", "source_type": "cloudtrail"},
+    ],
+    "Noisy Logs (Buried Attack)": [
+        {"file": "noisy_logs.json", "source_name": "cloudtrail", "source_type": "cloudtrail"},
+    ],
+    "Credential Stuffing (Brute Force)": [
+        {"file": "credential_stuffing_logs.json", "source_name": "auth_logs", "source_type": "custom"},
+    ],
+    "Malformed Logs (Truncated JSON)": [
+        {"file": "malformed_logs.json", "source_name": "cloudtrail", "source_type": "cloudtrail"},
+    ],
 }
 
 SAMPLE_LOGS_DIR = ROOT / "data" / "sample_logs"
@@ -121,12 +133,26 @@ async def _run_pipeline_with_live_log(
     timeout_seconds: int,
     monitor: BandStatusMonitor,
     log_placeholder: st.delta_generator.DeltaGenerator,
+    alert_placeholder: st.delta_generator.DeltaGenerator,
 ) -> Dict[str, Any]:
     """Execute the pipeline while refreshing the Band status log."""
 
     async def refresh_loop() -> None:
         while True:
             render_band_status_log(monitor, placeholder=log_placeholder)
+            
+            # Display warning/error alert dynamically
+            entries = monitor.get_sorted_entries()
+            errors = [e for e in entries if e.status == "error"]
+            if errors:
+                latest_error = errors[-1]
+                if "Retrying..." in (latest_error.error or ""):
+                    alert_placeholder.warning(f"⚠️ Transient error encountered: {latest_error.error} Retrying in background...")
+                else:
+                    alert_placeholder.error(f"❌ Pipeline error: {latest_error.error}")
+            else:
+                alert_placeholder.empty()
+                
             await asyncio.sleep(0.25)
 
     refresh_task = asyncio.create_task(refresh_loop())
@@ -153,6 +179,7 @@ def _run_investigation(
     enable_hipaa: bool,
     timeout_seconds: int,
     log_placeholder: st.delta_generator.DeltaGenerator,
+    alert_placeholder: st.delta_generator.DeltaGenerator,
     input_mode: str,
     uploaded_files: Optional[List[Any]] = None,
     pasted_content: str = "",
@@ -187,6 +214,7 @@ def _run_investigation(
                 timeout_seconds,
                 monitor,
                 log_placeholder,
+                alert_placeholder,
             )
         )
     finally:
@@ -240,6 +268,7 @@ def main() -> None:
         run_clicked = st.button("Run Investigation", type="primary", use_container_width=True)
 
     st.subheader("Live Band Coordination Log")
+    alert_placeholder = st.empty()
     log_placeholder = st.empty()
 
     if st.session_state.status_log_html and not st.session_state.investigation_running:
@@ -268,6 +297,7 @@ def main() -> None:
                         enable_hipaa=enable_hipaa,
                         timeout_seconds=timeout_seconds,
                         log_placeholder=log_placeholder,
+                        alert_placeholder=alert_placeholder,
                         input_mode=input_mode,
                         uploaded_files=uploaded_files,
                         pasted_content=pasted_content,
