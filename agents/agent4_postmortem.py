@@ -57,6 +57,7 @@ class PostMortemAgent(BaseAgent):
             prompt=prompt,
             response_model=PostMortemReport,
             system_prompt=system_prompt,
+            run_id=run_id,
         )
 
         self.logger.info(

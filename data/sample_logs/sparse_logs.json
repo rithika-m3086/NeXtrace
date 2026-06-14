@@ -1,0 +1,30 @@
+{
+  "Records": [
+    {
+      "eventVersion": "1.08",
+      "userIdentity": {
+        "type": "IAMUser",
+        "principalId": "AIDA11111111111EXAMPLE",
+        "arn": "arn:aws:iam::123456789012:user/dev-dhanush",
+        "accountId": "123456789012",
+        "accessKeyId": "AKIA2V3XE87EXAMPLE",
+        "userName": "dev-dhanush"
+      },
+      "eventTime": "2026-06-14T10:00:00Z",
+      "eventSource": "s3.amazonaws.com",
+      "eventName": "ListBuckets",
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "203.0.113.10",
+      "userAgent": "aws-cli/2.15.15 Python/3.11.8 Windows/10",
+      "requestParameters": null,
+      "responseElements": null,
+      "requestID": "req-00001-aaaaa",
+      "eventID": "evt-00001-bbbbb",
+      "readOnly": true,
+      "eventType": "AwsApiCall",
+      "managementEvent": true,
+      "recipientAccountId": "123456789012",
+      "eventCategory": "Management"
+    }
+  ]
+}

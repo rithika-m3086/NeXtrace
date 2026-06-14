@@ -130,8 +130,8 @@ class BaseAgent(ABC):
         # Register callback with client subscription
         self.band_client.subscribe(self.input_channel, message_callback)
 
-    def _call_model(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """Executes LLM call using openai library with retry logic."""
+    def _call_model(self, prompt: str, system_prompt: Optional[str] = None, run_id: Optional[str] = None) -> str:
+        """Executes LLM call using openai library with retry logic and 15s timeout."""
         if not self.openai_client:
             raise ValueError("LLM Client is not configured. Check your env variables.")
 
@@ -149,20 +149,53 @@ class BaseAgent(ABC):
             estimated_tokens = total_chars // 4
 
         self.logger.info(f"BaseAgent: Calling LLM (model={model}) with estimated {estimated_tokens} tokens")
-        response = call_with_retry(
-            self.openai_client.chat.completions.create,
-            model=model,
-            messages=messages,
-            temperature=0.1,
-            estimated_tokens=estimated_tokens,
-        )
-        return response.choices[0].message.content or ""
+
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                response = call_with_retry(
+                    self.openai_client.chat.completions.create,
+                    model=model,
+                    messages=messages,
+                    temperature=0.1,
+                    estimated_tokens=estimated_tokens,
+                    timeout=15.0,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                error_msg = f"LLM call failed: {e}"
+                self.logger.warning(
+                    f"BaseAgent '{self.agent_id}': {error_msg} (Attempt {attempt+1}/{max_attempts})",
+                    extra={"pipeline_run_id": run_id} if run_id else {}
+                )
+                
+                is_transient = (attempt < max_attempts - 1)
+                if run_id:
+                    err_msg = BandMessage.create(
+                        pipeline_run_id=run_id,
+                        agent_id=self.agent_id,
+                        channel="pipeline_errors",
+                        sequence=999,
+                        status="error",
+                        confidence=0.0,
+                        payload={
+                            "error": f"{error_msg} (Retrying...)" if is_transient else error_msg,
+                            "stage": self.output_channel,
+                            "transient": is_transient
+                        }
+                    )
+                    self.band_client.publish("pipeline_errors", err_msg)
+                
+                if not is_transient:
+                    raise e
+                time.sleep(1.0)
 
     def _call_model_json(
         self,
         prompt: str,
         response_model: Type[BaseModel],
         system_prompt: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> BaseModel:
         """Calls the LLM and validates JSON structure.
 
@@ -181,7 +214,7 @@ class BaseAgent(ABC):
         current_prompt = prompt
 
         for attempt in range(2):
-            raw_response = self._call_model(current_prompt, system_prompt=full_system_prompt)
+            raw_response = self._call_model(current_prompt, system_prompt=full_system_prompt, run_id=run_id)
             
             # Clean up leading/trailing whitespace
             cleaned = raw_response.strip()

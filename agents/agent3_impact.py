@@ -33,6 +33,7 @@ class ImpactAssessmentAgent(BaseAgent):
             prompt=prompt,
             response_model=ImpactAssessment,
             system_prompt=system_prompt,
+            run_id=run_id,
         )
 
         # Retrieve organization metadata from raw evidence input

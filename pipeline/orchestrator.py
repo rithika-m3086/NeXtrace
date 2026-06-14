@@ -47,22 +47,47 @@ class PipelineOrchestrator:
         run_id = str(uuid4())
         
         # Validate Input Schema
-        if isinstance(raw_logs, list):
-            log_sources = raw_logs
-        else:
-            log_sources = [
-                LogSource(
-                    source_name="raw_logs_input",
-                    source_type="custom",
-                    content=str(raw_logs),
-                )
-            ]
+        try:
+            if isinstance(raw_logs, list):
+                log_sources = raw_logs
+            else:
+                log_sources = [
+                    LogSource(
+                        source_name="raw_logs_input",
+                        source_type="custom",
+                        content=str(raw_logs),
+                    )
+                ]
 
-        input_data = RawEvidenceInput(
-            pipeline_run_id=run_id,
-            log_sources=log_sources,
-            metadata=metadata or {},
-        )
+            input_data = RawEvidenceInput(
+                pipeline_run_id=run_id,
+                log_sources=log_sources,
+                metadata=metadata or {},
+            )
+        except Exception as e:
+            error_msg = f"Input validation failed: {e}"
+            self.state_manager.create_run(run_id)
+            self.state_manager.mark_failed(run_id, error_msg)
+            
+            # Publish to pipeline_errors so UI monitor receives it
+            err_msg = BandMessage.create(
+                pipeline_run_id=run_id,
+                agent_id="orchestrator",
+                channel="pipeline_errors",
+                sequence=1,
+                status="error",
+                confidence=0.0,
+                payload={"error": error_msg, "stage": "raw_evidence_input"}
+            )
+            self.client.publish("pipeline_errors", err_msg)
+            
+            return {
+                "run_id": run_id,
+                "status": "failed",
+                "result": None,
+                "error": error_msg,
+                "stages": self.state_manager.get_full_context(run_id),
+            }
 
         # Initialize State Contexts
         self.state_manager.create_run(run_id)
@@ -108,11 +133,18 @@ class PipelineOrchestrator:
 
         def on_error(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
+                is_transient = msg.payload.get("transient", False)
                 error_msg = msg.payload.get("error", "Unknown pipeline error")
-                self.state_manager.mark_failed(run_id, error_msg)
-                result_container["status"] = "failed"
-                result_container["error"] = error_msg
-                completion_event.set()
+                if is_transient:
+                    self.client.logger.warning(
+                        f"Orchestrator: Observed transient error from {msg.agent_id}: {error_msg}",
+                        extra={"pipeline_run_id": run_id}
+                    )
+                else:
+                    self.state_manager.mark_failed(run_id, error_msg)
+                    result_container["status"] = "failed"
+                    result_container["error"] = error_msg
+                    completion_event.set()
 
         # Register subscriptions
         self.client.subscribe("forensic_timeline", on_timeline)
