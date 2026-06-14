@@ -67,6 +67,40 @@ def _load_scenario_log_sources(scenario_key: str) -> List[LogSource]:
     return sources
 
 
+def _load_custom_log_sources(
+    input_mode: str,
+    uploaded_files: Optional[List[Any]],
+    pasted_content: str,
+    pasted_source_name: str,
+) -> List[LogSource]:
+    sources: List[LogSource] = []
+    if input_mode == "Upload Logs":
+        if uploaded_files:
+            for file in uploaded_files:
+                source_name = Path(file.name).stem
+                content = file.read()
+                if isinstance(content, bytes):
+                    content = content.decode("utf-8")
+                else:
+                    content = str(content)
+                sources.append(
+                    LogSource(
+                        source_name=source_name,
+                        source_type="custom",
+                        content=content,
+                    )
+                )
+    elif input_mode == "Paste Logs":
+        sources.append(
+            LogSource(
+                source_name=pasted_source_name,
+                source_type="custom",
+                content=pasted_content,
+            )
+        )
+    return sources
+
+
 def _build_metadata(org_name: str, enable_soc2: bool, enable_hipaa: bool) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {
         "state": "CA",
@@ -119,6 +153,10 @@ def _run_investigation(
     enable_hipaa: bool,
     timeout_seconds: int,
     log_placeholder: st.delta_generator.DeltaGenerator,
+    input_mode: str,
+    uploaded_files: Optional[List[Any]] = None,
+    pasted_content: str = "",
+    pasted_source_name: str = "pasted_logs",
 ) -> Dict[str, Any]:
     """Synchronous wrapper that runs the async pipeline on a dedicated event loop."""
     client = BandClient()
@@ -130,7 +168,12 @@ def _run_investigation(
     monitor.subscribe()
     monitor.add_orchestrator_start()
 
-    log_sources = _load_scenario_log_sources(scenario)
+    if input_mode == "Sample Scenario":
+        log_sources = _load_scenario_log_sources(scenario)
+    else:
+        log_sources = _load_custom_log_sources(
+            input_mode, uploaded_files, pasted_content, pasted_source_name
+        )
     metadata = _build_metadata(org_name, enable_soc2, enable_hipaa)
 
     loop = asyncio.new_event_loop()
@@ -168,6 +211,28 @@ def main() -> None:
         st.header("Investigation Controls")
         org_name = st.text_input("Organization name", value="Acme Corp")
         scenario = st.selectbox("Scenario", options=list(SCENARIOS.keys()))
+        input_mode = st.radio("Log Input Mode", ["Sample Scenario", "Upload Logs", "Paste Logs"])
+
+        uploaded_files = None
+        pasted_content = ""
+        pasted_source_name = "pasted_logs"
+
+        if input_mode == "Upload Logs":
+            uploaded_files = st.file_uploader(
+                "Upload Log Files",
+                type=["json", "txt"],
+                accept_multiple_files=True,
+            )
+        elif input_mode == "Paste Logs":
+            pasted_content = st.text_area(
+                "Paste Logs",
+                placeholder="Paste raw log content here...",
+            )
+            pasted_source_name = st.text_input(
+                "Source Name",
+                value="pasted_logs",
+            )
+
         st.subheader("Compliance Context")
         enable_soc2 = st.toggle("SOC 2 certified organization", value=True)
         enable_hipaa = st.toggle("HIPAA covered entity", value=True)
@@ -181,33 +246,46 @@ def main() -> None:
         log_placeholder.markdown(st.session_state.status_log_html, unsafe_allow_html=True)
 
     if run_clicked and not st.session_state.investigation_running:
-        st.session_state.investigation_running = True
-        st.session_state.pipeline_result = None
-        st.session_state.status_log_html = None
+        has_error = False
+        if input_mode == "Upload Logs" and not uploaded_files:
+            st.warning("Please provide log input before running.")
+            has_error = True
+        elif input_mode == "Paste Logs" and not pasted_content.strip():
+            st.warning("Please provide log input before running.")
+            has_error = True
 
-        with st.spinner("Investigation in progress — agents coordinating over Band…"):
-            try:
-                result = _run_investigation(
-                    org_name=org_name,
-                    scenario=scenario,
-                    enable_soc2=enable_soc2,
-                    enable_hipaa=enable_hipaa,
-                    timeout_seconds=timeout_seconds,
-                    log_placeholder=log_placeholder,
-                )
-                st.session_state.pipeline_result = result
-                st.session_state.last_run_id = result.get("run_id")
-            except Exception as exc:
-                st.session_state.pipeline_result = {
-                    "status": "failed",
-                    "error": str(exc),
-                    "stages": {},
-                }
-                st.error(f"Investigation failed: {exc}")
-            finally:
-                st.session_state.investigation_running = False
+        if not has_error:
+            st.session_state.investigation_running = True
+            st.session_state.pipeline_result = None
+            st.session_state.status_log_html = None
 
-        st.rerun()
+            with st.spinner("Investigation in progress — agents coordinating over Band…"):
+                try:
+                    result = _run_investigation(
+                        org_name=org_name,
+                        scenario=scenario,
+                        enable_soc2=enable_soc2,
+                        enable_hipaa=enable_hipaa,
+                        timeout_seconds=timeout_seconds,
+                        log_placeholder=log_placeholder,
+                        input_mode=input_mode,
+                        uploaded_files=uploaded_files,
+                        pasted_content=pasted_content,
+                        pasted_source_name=pasted_source_name,
+                    )
+                    st.session_state.pipeline_result = result
+                    st.session_state.last_run_id = result.get("run_id")
+                except Exception as exc:
+                    st.session_state.pipeline_result = {
+                        "status": "failed",
+                        "error": str(exc),
+                        "stages": {},
+                    }
+                    st.error(f"Investigation failed: {exc}")
+                finally:
+                    st.session_state.investigation_running = False
+
+            st.rerun()
 
     result: Optional[Dict[str, Any]] = st.session_state.pipeline_result
     if result:

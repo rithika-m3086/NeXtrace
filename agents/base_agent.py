@@ -141,23 +141,22 @@ class BaseAgent(ABC):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        max_retries = 3
-        delay = 2.0
-        for attempt in range(max_retries):
-            try:
-                self.logger.info(f"BaseAgent: Calling LLM (model={model}), attempt {attempt+1}/{max_retries}")
-                response = self.openai_client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    temperature=0.1,
-                )
-                return response.choices[0].message.content or ""
-            except Exception as e:
-                self.logger.warning(f"BaseAgent: LLM call error: {e}. Retrying in {delay}s...")
-                time.sleep(delay)
-                delay *= 2.0
-        
-        raise RuntimeError("BaseAgent: Failed to get response from LLM after 3 retries.")
+        from utils.rate_limiter import call_with_retry
+
+        total_chars = len(prompt) + len(system_prompt or "")
+        estimated_tokens = getattr(prompt, "estimated_tokens", None)
+        if estimated_tokens is None:
+            estimated_tokens = total_chars // 4
+
+        self.logger.info(f"BaseAgent: Calling LLM (model={model}) with estimated {estimated_tokens} tokens")
+        response = call_with_retry(
+            self.openai_client.chat.completions.create,
+            model=model,
+            messages=messages,
+            temperature=0.1,
+            estimated_tokens=estimated_tokens,
+        )
+        return response.choices[0].message.content or ""
 
     def _call_model_json(
         self,
