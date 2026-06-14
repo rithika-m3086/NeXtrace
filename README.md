@@ -1,23 +1,20 @@
-<p align="center">
-  <!-- Product Logo placeholder (to be updated later) -->
-  <!-- <img src="assets/nextrace_banner.png" width="600" alt="NeXtrace Logo" /> -->
-</p>
-
 <h2 align="center">NeXtrace — Security Incident Intelligence Platform</h2>
 
 <div align="center">
 
 <br/>
 
-*Automate the full lifecycle of security incidents: from raw evidence to complete, blameless remediation.*
+*From raw machine logs to a blameless, actionable incident post-mortem — in minutes, coordinated by a band of specialized AI agents.*
 
 <br/>
 
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB?style=flat-square&logo=python)](https://www.python.org/)
-[![Band](https://img.shields.io/badge/AI-Band%20(Thenvoi)-58a6ff?style=flat-square)](https://band.ai/)
+[![Band](https://img.shields.io/badge/Coordination-Band%20(Thenvoi)-58a6ff?style=flat-square)](https://band.ai/)
+[![AI/ML API](https://img.shields.io/badge/Inference-AI%2FML%20API-black?style=flat-square)](https://aimlapi.com/)
 [![Pydantic](https://img.shields.io/badge/Validation-Pydantic%20v2-E92063?style=flat-square&logo=pydantic)](https://pydantic.dev/)
 [![Streamlit](https://img.shields.io/badge/Frontend-Streamlit-FF4B4B?style=flat-square&logo=streamlit)](https://streamlit.io/)
-[![OpenRouter](https://img.shields.io/badge/Inference-OpenRouter%20%7C%20AIML--API-black?style=flat-square)](https://openrouter.ai/)
+
+Built for the **[Band of Agents Hackathon](https://lablab.ai/ai-hackathons/band-of-agents-hackathon)** · lablab.ai
 
 </div>
 
@@ -25,68 +22,71 @@
 
 ## What is NeXtrace?
 
-When a security breach occurs, organizations waste critical days manually investigating access logs, mapping attacker steps, calculating exposure boundaries, and compiling post-mortem reports.
+When a security breach occurs, organizations waste critical days manually investigating access logs, mapping attacker steps, calculating exposure boundaries, and compiling post-mortem reports — while mandatory reporting clocks (like GDPR's 72-hour window) are already ticking.
 
-**NeXtrace** solves this by deploying a collaborative pipeline of four specialized AI agents coordinated through **Band** as the live communication infrastructure. It automatically ingests raw logs, reconstructs a chronological forensic timeline, attributes techniques to the MITRE ATT&CK framework, runs a deterministic compliance rules engine, and compiles a comprehensive, blameless post-mortem with a prioritized remediation action plan — in minutes.
+**NeXtrace** replaces that scramble with a **band of four specialized AI agents that collaborate through [Band](https://band.ai/)** as their live coordination layer. They join a shared Band chat room and hand work off to each other by **@mentioning** the next agent — exactly the way a human forensics → compliance → engineering team passes a case down the line, but in minutes.
 
-This is not a chatbot wrapper; it is an active multi-agent pipeline where agents delegate tasks, share context, and execute handoffs strictly over Band.
+The pipeline ingests raw logs, reconstructs a chronological forensic timeline, attributes attacker activity to the **MITRE ATT&CK** framework, runs a **deterministic compliance rules engine**, and compiles a **blameless post-mortem** with a prioritized, exportable remediation plan.
 
----
-
-## Problem Statement
-
-Incident response is bottlenecked by siloed processes. The forensic investigation team produces complex technical timelines. The compliance/post-mortem team translates these into business and legal reports. The engineering team awaits specific remediation instructions. 
-
-Because these processes are manual and disconnected:
-1. **Critical Delays**: Mandatory reporting deadlines (like GDPR's 72-hour window) are missed while analyzing logs.
-2. **Imprecise Remediation**: Remediation guidelines end up generic (e.g., "patch your systems") instead of targeting the specific leaked IAM credential or misconfigured S3 bucket.
-3. **Information Loss**: Context is lost during manual handoffs between analysts.
-4. **AI Hallucinations**: Asking a single LLM to perform forensics, determine compliance, and generate a post-mortem results in high rates of hallucinated timestamps, fake IPs, or incorrect legal triggers.
+> This is not a chatbot wrapper. Band is the actual collaboration fabric — agents discover each other, divide work, pass shared context, and escalate errors over Band rooms.
 
 ---
 
-## Proposed Solution
+## How Band is used (the core of this project)
 
-NeXtrace builds a highly reliable, structured multi-agent pipeline using a role-specialized collaboration model:
-1. **Separation of Concerns**: Four distinct agents handle logs forensics, MITRE attribution, impact calculation, and post-mortem generation.
-2. **Live Coordination via Band**: Agents do not invoke each other directly; they communicate by publishing and subscribing to named Band channels (`raw_evidence_input` -> `forensic_timeline` -> `attack_attribution` -> `impact_assessment` -> `postmortem_complete`).
-3. **Deterministic Compliance Evaluation**: To prevent LLM hallucination of regulatory compliance obligations, we isolate the compliance engine. The AI identifies exposed data categories, and a pure Python rules engine deterministically triggers GDPR, HIPAA, SOC2, CCPA, or PCI DSS flags.
-4. **Pydantic Validation Guardrails**: Every agent message envelope is validated against strict JSON schemas before being dispatched to the next channel, preventing cascading pipeline failures.
+NeXtrace treats Band as a real **multi-agent coordination layer**, not a notification sink:
+
+- **Four separately-registered Band agents** — Forensic, Attribution, Impact, Post-Mortem — each with its own Band API key + agent UUID.
+- **One shared chat room.** All agents join the same room and an orchestrator/observer identity streams the transcript into the UI.
+- **Handoffs via @mention.** Each agent finishes its stage, posts a structured `BandMessage` envelope to the room via `create_agent_chat_message`, and **@mentions the next agent**. Band's per-agent delivery queue (`get_agent_next_message` → `mark_agent_message_processed`) routes the mention to the recipient, who runs its stage and mentions the agent after it.
+- **Shared context + task state.** The envelope carries the accumulating incident context, a sequence number, confidence score, and stage status, so every agent works from the same evolving picture.
+- **Role specialization & escalation.** Errors are published to an error channel and surfaced to the orchestrator; the live coordination log shows every hand-off, retry, and escalation in real time.
+
+```
+                 Band Chat Room  (@mention delivery queue · agent REST API)
+   ┌───────────────────────────────────────────────────────────────────┐
+   │  Orchestrator ──@Forensic──▶ Forensic ──@Attribution──▶ Attribution│
+   │                                                  │                  │
+   │                                            @Impact ▼                │
+   │   UI  ◀──stream── Post-Mortem ◀──@PostMortem── Impact               │
+   └───────────────────────────────────────────────────────────────────┘
+```
+
+> **Offline simulator:** when Band credentials are absent, NeXtrace runs the *exact same pipeline* over a faithful in-process pub/sub simulator (`MockBandClient`) that mirrors Band's channel + mention semantics — so the project runs anywhere for development and CI, and switches to live Band purely via configuration. The sidebar shows a **LIVE · Band / MOCK · Local bus** indicator at all times.
 
 ---
 
-## The Build — Day by Day
+## Problem → Solution
 
-| Day | What We Shipped |
-|-----|----------------|
-| **01** | 🏗️ Scaffolding & Core Architecture: Initialized folder structure, JSON structured logger, Band communication layer in `core/` (channels, coordinator, Mock + Live Thenvoi clients, `BandMessage` envelope), five Pydantic schemas, `base_agent` with self-correcting JSON extraction & single-retry guard, deterministic compliance rules engine, orchestrator, state manager, and unit/integration test suites. |
-| **02** | 🗃️ Realistic Log Fixtures & E2E Validation: Created three correlated mock log fixtures (GitHub, CloudTrail, S3 Access) in `data/sample_logs/` for the API key leak scenario · Developed end-to-end scenario runner `scripts/run_scenario.py` · Verified multi-agent pipeline and tuned prompts to trigger GDPR, CCPA, HIPAA, and SOC2 alerts. |
-| **03** | 🖥️ Streamlit Dashboard & Live Band Log: Shipped the dark-themed security console UI with CSS-injected severity tokens · Built live Band coordination log streaming agent hand-offs (processing → completed → error) with elapsed time and confidence metadata · Added tabbed result views for forensic timeline, MITRE attribution, impact/compliance (GDPR 72h clock), and blameless post-mortem · Wired sidebar controls, scenario fixtures, and session-state persistence in `ui/app.py`. |
-| **04** | 🛡️ Hardening, Edge Cases & Gauntlet: Hardened the pipeline against sparse, noisy, and malformed inputs · Added 15s LLM timeouts, background retries, and transient error UI notifications · Implemented confidence degradation testing. |
-| **05** | *[Add day 5 details here]* |
-| **06** | *[Add day 6 details here]* |
+| Incident-response pain | How NeXtrace addresses it |
+|---|---|
+| **Critical delays** — reporting deadlines missed while logs are analyzed by hand | Agents parallelize forensics → attribution → impact → post-mortem and finish in minutes |
+| **Imprecise remediation** — "patch your systems" | Agent 4 emits a concrete, prioritized remediation plan you can file as **GitHub Issues / Jira tickets** in one click |
+| **Context loss across manual handoffs** | Shared `BandMessage` envelope carries accumulating context through every Band hand-off |
+| **LLM hallucinations** — one model doing forensics *and* law | Role separation + a **deterministic Python compliance engine** (no LLM) for GDPR/HIPAA/SOC2/CCPA/PCI-DSS triggers + Pydantic-validated contracts |
+| **Sending secrets to a public LLM** is itself a breach | A **PII/secret masking pre-processor** redacts credentials, keys, cards and PII *before* any payload leaves the box |
 
 ---
 
 ## Features
 
-**Multi-Agent Band Pipeline**
-Fully automated event-driven architecture mapping specialized agents (Forensic, Attribution, Blast Radius, Post-Mortem) to dedicated channels using `thenvoi-sdk`.
+**🔗 Band-coordinated multi-agent pipeline** — four specialized agents collaborate through a real Band chat room with @mention hand-offs, shared context, sequence/task state, and live status streaming.
 
-**Structured Pydantic Data Contracts**
-End-to-end type safety and JSON schema validation for all agent message exchanges.
+**🧩 Strict Pydantic data contracts** — every inter-agent envelope is schema-validated before dispatch, preventing cascading failures.
 
-**Deterministic Compliance Evaluator**
-Isolated Python rule evaluator preventing LLM hallucinations by calculating strict regulatory triggers (GDPR 72h, HIPAA, CCPA, PCI DSS, SOC2) downstream of Agent 3.
+**⚖️ Deterministic compliance evaluator** — an isolated pure-Python rules engine triggers GDPR (72h), HIPAA, SOC2, CCPA, and PCI-DSS obligations downstream of Agent 3, with zero hallucination risk.
 
-**Self-Correcting LLM Extraction Guardrails**
-Built-in markdown-slicing parser and retry loop preventing invalid JSON formatting from breaking execution.
+**🛡️ PII / secret masking pre-processor** — deterministic, referential-integrity-preserving tokenization (`<REDACTED_EMAIL_1>`) of AWS keys, API tokens, JWTs, cards (Luhn-checked), SSNs, emails — *before* the LLM ever sees the logs. Security & privacy by design.
 
-**Interactive Streamlit Dashboard**
-Dark-themed security interface displaying real-time agent status streaming, forensic logs timeline, ATT&CK steps, and legal compliance reports.
+**🎯 Incident verdict summary** — overall severity, agent confidence, blast radius, compliance exposure, and redaction count surfaced as console metric cards at the top of every report.
 
-**Blameless & Actionable Post-Mortem Writer**
-Compiles objective incident reports with prioritized remediation plans.
+**🗺️ Visual attack journey** — a Mermaid attack-path diagram generated deterministically from the MITRE chain, plus a **GeoIP origin map** pinning attacker source IPs.
+
+**🎫 Interactive remediation & ticket export** — tick off remediation tasks and file them as **GitHub Issues** or **Jira** tickets, or export a **PDF audit report** / markdown checklist for the compliance record.
+
+**🧱 Self-correcting LLM guardrails** — markdown-slicing JSON extraction + single-retry self-correction loop, 15s timeouts, exponential backoff, rolling rate-limiting, SIEM noise pre-filter, and context-window chunking.
+
+**🖥️ Dark security-console UI** — Streamlit dashboard with a real-time Band coordination log (processing → completed → error, elapsed time, confidence) and a live/mock mode indicator.
 
 ---
 
@@ -94,100 +94,109 @@ Compiles objective incident reports with prioritized remediation plans.
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Streamlit, Custom Vanilla CSS |
-| **Backend Orchestrator** | Python 3.11+ |
-| **Communication Bus** | Band Platform (`thenvoi-sdk` wrapper with mock pub-sub fallback) |
-| **Data Contracts** | Pydantic v2 (Strict Schema Validation) |
-| **Inference Models** | OpenRouter / AIML API (Claude 3.5 Sonnet / Gemini 2.5 Pro) |
-| **Test Runner** | Pytest, Pytest-Asyncio |
+| **Coordination layer** | **Band** (Thenvoi) via `thenvoi-sdk` — rooms, @mentions, per-agent delivery queue · faithful local simulator fallback |
+| **Inference (partner)** | **[AI/ML API](https://aimlapi.com/)** (OpenAI-compatible) — Claude / GPT class models · optional OpenRouter fallback |
+| **Frontend** | Streamlit + custom security-console CSS · Mermaid.js · `st.map` |
+| **Data contracts** | Pydantic v2 (strict schema validation) |
+| **Exports** | ReportLab (PDF) · GitHub Issues API · Jira Cloud API |
+| **Tests** | Pytest, Pytest-Asyncio (44 tests) |
 
 ---
 
 ## Multi-Agent Architecture
 
-```
-                      Raw Logs Input
-                            │
-                            ▼
-                ┌───────────────────────┐
-                │ ForensicEvidenceAgent │ (Agent 1: chronologically parses logs)
-                └───────────────────────┘
-                            │
-                  [forensic_timeline]
-                            ▼
-                ┌────────────────────────┐
-                │ AttackAttributionAgent │ (Agent 2: maps steps to MITRE ATT&CK)
-                └────────────────────────┘
-                            │
-                  [attack_attribution]
-                            ▼
-                ┌───────────────────────┐
-                │ ImpactAssessmentAgent │ (Agent 3: blast radius + compliance rules)
-                └───────────────────────┘
-                            │
-                  [impact_assessment]
-                            ▼
-                 ┌──────────────────┐
-                 │ PostMortemAgent  │ (Agent 4: compiles technical report)
-                 └──────────────────┘
-                            │
-                  [postmortem_complete]
-                            ▼
-                     Orchestrator / UI
-```
+| # | Agent | Input (subscribes) | Output (publishes → @mentions) | Schema |
+|---|-------|--------------------|-------------------------------|--------|
+| 1 | **ForensicEvidenceAgent** | `raw_evidence_input` | `forensic_timeline` → Agent 2 | `ForensicTimeline` |
+| 2 | **AttackAttributionAgent** | `forensic_timeline` | `attack_attribution` → Agent 3 | `AttributionReport` |
+| 3 | **ImpactAssessmentAgent** | `attack_attribution` | `impact_assessment` → Agent 4 | `ImpactAssessment` |
+| 4 | **PostMortemAgent** | `impact_assessment` | `postmortem_complete` → Orchestrator | `PostMortemReport` |
+
+`pipeline_status` and `pipeline_errors` carry live status/escalation to the orchestrator and UI.
 
 ---
 
 ## Setup & Execution
 
 ### Prerequisites
+- Python **3.13** (pinned in `.python-version`; 3.11+ supported)
+- An **AI/ML API** key (partner provider) — get one at [aimlapi.com](https://aimlapi.com/) and redeem the hackathon coupon
+- *(Optional, for live coordination)* a **Band** account + four registered agents and one chat room
 
-- Python 3.11+
-- OpenRouter API Key (or AIML API Key)
-
-### 1. Clone the Repository
-
+### 1. Clone & install
 ```bash
 git clone https://github.com/rithika-m3086/NeXtrace.git
 cd NeXtrace
+pip install -r requirements.txt          # or: uv sync --extra test
 ```
 
-### 2. Configure Environment
-
-Install the frozen dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Create your `.env` file from the example:
-
+### 2. Configure environment
 ```bash
 cp .env.example .env
 ```
-
-Open `.env` and configure your API keys:
-
+Minimum to run (offline mock coordination):
 ```env
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+AIML_API_KEY=your_aiml_api_key_here
 MODEL_NAME=anthropic/claude-3.5-sonnet
 ```
+To run **live over Band**, also register four agents + a room in [app.band.ai](https://app.band.ai) and set:
+```env
+BAND_ROOM_ID=...
+BAND_AGENT1_API_KEY=...   BAND_AGENT1_ID=...
+BAND_AGENT2_API_KEY=...   BAND_AGENT2_ID=...
+BAND_AGENT3_API_KEY=...   BAND_AGENT3_ID=...
+BAND_AGENT4_API_KEY=...   BAND_AGENT4_ID=...
+```
+*(Optional)* `GITHUB_TOKEN` + `GITHUB_REPO` or `JIRA_*` to enable ticket export.
 
-*Note: If `BAND_API_KEY` is not provided, the platform automatically switches to a local in-memory Mock pub-sub mechanism, allowing offline testing and development.*
+> 🔒 **Never commit `.env`.** It is git-ignored. Rotate any key that has ever been committed.
 
-### 3. Run Tests
-
-To execute unit and integration test suites:
-
+### 3. Verify Band credentials (live mode)
 ```bash
-pytest
+uv run python scripts/verify_band.py
+```
+Validates each agent via `GET /agent/me` and confirms room membership.
+
+### 4. Run the tests
+```bash
+uv run --extra test python -m pytest -q          # 44 passing
 ```
 
-### 4. Run UI Dashboard
-
+### 5. Launch the dashboard
 ```bash
 streamlit run ui/app.py
 ```
+
+---
+
+## Hackathon Compliance
+
+NeXtrace is built directly against the [Band of Agents](https://lablab.ai/ai-hackathons/band-of-agents-hackathon) judging criteria:
+
+| Criterion | How NeXtrace meets it |
+|---|---|
+| **Use of Band as coordination layer** | 4 separately-registered agents collaborate through a shared Band room with @mention hand-offs, shared context, sequence/task state, and a live transcript — Band is the fabric, not a wrapper |
+| **Clarity of explanation** | Real-time Band coordination log + Mermaid attack path make the multi-agent workflow visible step-by-step; the verdict summary states the outcome up front |
+| **Real enterprise workflow** | Automates the forensics → compliance → engineering incident lifecycle, reduces manual coordination, and outputs filable tickets + an audit PDF |
+| **Creative multi-agent collaboration** | Role-specialized agents that divide work, pass evolving context, and escalate errors — beyond a single-agent assistant |
+| **Partner technology (AI/ML API)** | All agent reasoning is routed through AI/ML API |
+
+**Submission assets:** working app (URL) · ≤5-min demo video · slide deck (PDF) · this public, MIT-compliant repository.
+
+---
+
+## Demo / Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/01_dashboard.png" alt="Dashboard & live Band log" width="100%"/><br/><sub><b>Console + Live Band Log</b> — real-time agent hand-offs over Band</sub></td>
+    <td width="50%"><img src="assets/screenshots/02_verdict_timeline.png" alt="Verdict & forensic timeline" width="100%"/><br/><sub><b>Incident Verdict + Timeline</b> — severity, confidence, normalized events</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/screenshots/03_attack_map.png" alt="Mermaid attack path + GeoIP map" width="100%"/><br/><sub><b>Attack Path + Origin Map</b> — MITRE chain as a Mermaid diagram, attacker GeoIP</sub></td>
+    <td width="50%"><img src="assets/screenshots/04_postmortem_export.png" alt="Post-mortem & ticket export" width="100%"/><br/><sub><b>Post-Mortem + Export</b> — remediation checklist, GitHub/Jira & PDF export</sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -195,74 +204,48 @@ streamlit run ui/app.py
 
 ```
 NeXtrace/
-├── agents/                  # Specialized Band-enabled AI agents
-│   ├── base_agent.py        # Abstract BaseAgent with JSON guardrails and retry logic
-│   ├── agent1_forensic.py   # Parses logs into normalized timeline events
-│   ├── agent2_attribution.py# Maps threat activity to MITRE ATT&CK framework
-│   ├── agent3_impact.py     # Calculates blast radius and data exposure
-│   └── agent4_postmortem.py # Compiles professional post-mortem and remediation tasks
-├── assets/                  # Images and logos
-│   └── codeblooded_logo.jpg # Team CodeBlooded logo
-├── core/                    # Communication bus wrapper and coordinator
+├── agents/                  # Specialized Band-enabled agents (base + 4 roles)
+├── core/
 │   ├── channels.py          # BandChannel definitions
-│   ├── client.py            # BandClient & MockBandClient implementations
-│   ├── coordinator.py       # Manages async subscribers and pipeline execution
-│   └── message_types.py     # Standard message envelopes
-├── data/                    # Sample evidence logs (CloudTrail, firewall, syslog)
-├── outputs/                 # Directory where final reports are saved
-├── pipeline/                # Orchestration and state manager
-│   ├── orchestrator.py      # Hooks agents to channels and runs the pipeline
-│   └── state_manager.py     # Aggregates context from all upstream stages
-├── prompts/                 # System and user prompt templates
-├── schemas/                 # Strict Pydantic data contracts
-│   ├── input_schema.py      # RawEvidenceInput
-│   ├── timeline_schema.py   # ForensicTimeline
-│   ├── attribution_schema.py# AttributionReport
-│   ├── impact_schema.py     # ImpactAssessment
-│   └── postmortem_schema.py # PostMortemReport
-├── tests/                   # Automated unit and integration test suites
-│   ├── integration/
-│   └── unit/
-├── ui/                      # Streamlit UI dashboard components
-│   ├── components/
-│   └── styles/
-├── utils/                   # Shared utility modules
-│   ├── compliance_rules.py  # Deterministic regulatory rules engine
-│   └── logger.py            # Structured JSON logger
-├── pyproject.toml           # Project metadata and dependencies
-└── requirements.txt         # Frozen package requirements
+│   ├── client.py            # BandClient facade (Mock | Live) + MockBandClient
+│   ├── live_band.py         # Live Band transport: room + @mention routing, WS receive
+│   ├── coordinator.py       # Hand-off / status / timeout tracking
+│   └── message_types.py     # BandMessage envelope
+├── pipeline/                # Orchestrator + state manager
+├── prompts/                 # System/user prompt templates per agent
+├── schemas/                 # Strict Pydantic contracts
+├── utils/
+│   ├── compliance_rules.py  # Deterministic regulatory engine
+│   ├── pii_masker.py        # Secret/PII masking pre-processor
+│   ├── severity.py          # Incident verdict aggregation
+│   ├── mermaid.py           # MITRE → Mermaid attack path
+│   ├── geoip.py             # Attacker IP geolocation
+│   ├── ticketing.py         # GitHub Issues / Jira / markdown export
+│   ├── pdf_report.py        # PDF audit report (ReportLab)
+│   ├── log_filter.py · chunker.py · rate_limiter.py · logger.py
+├── ui/
+│   ├── app.py               # Streamlit dashboard
+│   ├── components/          # band_status, summary_view, attack_map, ticket_export, *_view
+│   └── styles/theme.py      # Dark security-console theme
+├── scripts/
+│   ├── run_scenario.py      # CLI E2E runner
+│   └── verify_band.py       # Live Band credential/room verifier
+├── data/sample_logs/        # Correlated attack fixtures + edge cases
+└── tests/                   # 44 unit + integration tests
 ```
 
 ---
 
-## Band Channels Reference
+## The Build — Day by Day
 
-| Channel Name | Publisher | Subscriber | Message Schema |
-|--------------|-----------|------------|----------------|
-| `raw_evidence_input` | Orchestrator | Agent 1 | `RawEvidenceInput` |
-| `forensic_timeline` | Agent 1 | Agent 2 | `ForensicTimeline` |
-| `attack_attribution` | Agent 2 | Agent 3 | `AttributionReport` |
-| `impact_assessment` | Agent 3 | Agent 4 | `ImpactAssessment` |
-| `postmortem_complete` | Agent 4 | Orchestrator | `PostMortemReport` |
-| `pipeline_status` | All Components | UI / Coordinator | `BandMessage` |
-| `pipeline_errors` | All Agents | Orchestrator | `BandMessage` |
-
----
-
-## Demo / Screenshots
-
-*(Screenshots will be populated as frontend views are finalized)*
-
-<table>
-  <tr>
-    <td width="50%"><img src="assets/dashboard_placeholder.png" alt="Dashboard" width="100%"/><br/><sub><b>Dashboard</b> — Multi-agent pipeline status and activity streams</sub></td>
-    <td width="50%"><img src="assets/timeline_placeholder.png" alt="Timeline" width="100%"/><br/><sub><b>Incident Timeline</b> — Normalized events chronological list and attack map</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="assets/mitre_placeholder.png" alt="MITRE ATT&CK Matrix" width="100%"/><br/><sub><b>MITRE ATT&CK</b> — Identified tactics and techniques with confidence scores</sub></td>
-    <td width="50%"><img src="assets/postmortem_placeholder.png" alt="Post-Mortem Report" width="100%"/><br/><sub><b>Post-Mortem & Remediation</b> — Auto-generated technical reports and action items</sub></td>
-  </tr>
-</table>
+| Day | What We Shipped |
+|-----|----------------|
+| **01** | 🏗️ Scaffolding & core architecture: Band communication layer, five Pydantic schemas, self-correcting base agent, deterministic compliance engine, orchestrator, state manager, test suites. |
+| **02** | 🗃️ Correlated mock log fixtures (GitHub + CloudTrail + S3) for an API-key-leak attack · CLI scenario runner · prompt tuning to trigger GDPR/CCPA/HIPAA/SOC2. |
+| **03** | 🖥️ Dark-themed Streamlit console · live Band coordination log (processing → completed → error) · tabbed forensic / ATT&CK / impact / post-mortem views. |
+| **04** | 🛡️ Hardening: sparse / noisy / malformed inputs · 15s LLM timeouts, retries, transient-error alerts · rate-limiting, SIEM pre-filter, context chunking · degradation tests. |
+| **05** | 🚀 Real Band integration (room + @mention WebSocket transport, per-agent identities, `verify_band.py`) · AI/ML API partner inference · PII masking · incident verdict summary · Mermaid attack path · GeoIP map · GitHub/Jira ticket export · PDF audit report · live/mock indicator · packaging + Python pin fixes · 44 tests green. |
+| **06** | ✅ Cold-start dry runs, deployment, and final submission assets (video, deck, public repo). |
 
 ---
 
@@ -270,17 +253,17 @@ NeXtrace/
 
 **CodeBlooded** — Built for the Band of Agents Hackathon (lablab.ai)
 
-<p align="center">
-  <img src="assets/codeblooded_logo.jpg" width="600" alt="CodeBlooded Logo" />
-</p>
-
 | Name | Role |
 |------|------|
-| **Dhanush Reddy S** | Backend Architecture · Multi-Agent Bus · Compliance Logic |
-| **M Rithika** | UI/UX Development · Prompt Engineering · Integrations |
+| **Dhanush Reddy S** | Backend architecture · Multi-agent Band layer · Compliance logic |
+| **M Rithika** | UI/UX development · Prompt engineering · Integrations |
+
+<p align="center">
+  <img src="assets/codeblooded_logo.jpg" width="420" alt="CodeBlooded Logo" />
+</p>
 
 ---
 
 <div align="center">
-<sub>Built with ☕ and zero sleep · CodeBlooded Team · 2026</sub>
+<sub>NeXtrace · multi-agent security incident intelligence, coordinated through Band · 2026</sub>
 </div>

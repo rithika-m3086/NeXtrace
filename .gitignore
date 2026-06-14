@@ -36,3 +36,11 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Build artifacts
+*.egg-info/
+build/
+dist/
+
+# Tooling
+.playwright-mcp/

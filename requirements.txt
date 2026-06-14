@@ -1,7 +1,22 @@
-thenvoi-sdk
+# ── Core ────────────────────────────────────────────────────────────────────
 pydantic>=2.0
-streamlit
 python-dotenv
-openai
+openai                 # client used against AI/ML API (partner provider) base_url
+
+# ── Band multi-agent coordination layer ─────────────────────────────────────
+# Official Band SDK (Thenvoi). Provides the `thenvoi` Agent class + WebSocket
+# transport (Phoenix Channels) used to send/receive messages through Band chat
+# rooms. (PyPI also publishes this as `band-sdk[langgraph]`; thenvoi-sdk is the
+# package this project pins and imports as `thenvoi`.)
+thenvoi-sdk>=0.2.11
+
+# ── UI ──────────────────────────────────────────────────────────────────────
+streamlit
+
+# ── Premium features ────────────────────────────────────────────────────────
+requests               # GeoIP lookups + GitHub/Jira ticket export
+reportlab              # PDF incident report export
+
+# ── Tests ───────────────────────────────────────────────────────────────────
 pytest
 pytest-asyncio

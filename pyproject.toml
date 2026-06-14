@@ -19,12 +19,32 @@ dependencies = [
     "pydantic>=2.0",
     "streamlit",
     "python-dotenv",
-    "openai"
+    "openai",
+    "requests",
+    "reportlab",
 ]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio"]
 
 [build-system]
 requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Explicit package list — the repo is a flat layout with several non-package
+# top-level dirs (data/, assets/, outputs/, band_old/), so disable autodiscovery.
+packages = [
+    "agents",
+    "core",
+    "pipeline",
+    "prompts",
+    "schemas",
+    "ui",
+    "ui.components",
+    "ui.styles",
+    "utils",
+]
 
 [tool.pytest.ini_options]
 minversion = "6.0"

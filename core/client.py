@@ -1,28 +1,44 @@
+"""Band client facade.
+
+Selects between two transports that share one interface
+(``publish`` / ``subscribe``):
+
+* ``MockBandClient`` — a faithful in-process pub/sub simulator used for local
+  development, CI, and offline demos. It mirrors Band's channel semantics so the
+  exact same pipeline code runs in both modes.
+* ``LiveBandClient`` (see :mod:`core.live_band`) — routes the pipeline through a
+  real Band chat room where four separately-registered agents collaborate by
+  @mentioning each other over Band's WebSocket transport.
+
+Mode is chosen automatically: if a Band room + the four agent credentials are
+present in the environment, the client runs **live**; otherwise it falls back to
+the mock simulator. An explicit ``api_key`` argument also forces live mode
+(legacy/explicit path).
+"""
+
+from __future__ import annotations
+
 import asyncio
 import inspect
-import os
 from typing import Any, Callable, Dict, List, Optional
+
 from core.message_types import BandMessage
+from core.live_band import (
+    BandAgentCreds,
+    BandClientError,
+    LiveBandClient,
+    is_live_configured,
+    load_creds_from_env,
+)
 from utils.logger import get_logger
 
-# Import Thenvoi classes safely
-try:
-    from thenvoi_rest import RestClient, ChatMessageRequest
-    from thenvoi import Agent
-    THENVOI_AVAILABLE = True
-except ImportError:
-    THENVOI_AVAILABLE = False
+import os
 
-
-class BandClientError(Exception):
-    """Custom wrapper for all Band-related exceptions."""
-    def __init__(self, message: str, original_error: Optional[Exception] = None):
-        super().__init__(message)
-        self.original_error = original_error
+__all__ = ["BandClient", "BandClientError", "MockBandClient", "LiveBandClient"]
 
 
 class MockBandClient:
-    """Mock in-memory pub-sub client for local/offline development."""
+    """In-memory pub/sub client mirroring Band channel semantics for offline use."""
 
     def __init__(self, logger):
         self.logger = logger
@@ -31,111 +47,90 @@ class MockBandClient:
     def publish(self, channel: str, message: BandMessage) -> bool:
         self.logger.info(
             f"[MOCK BAND] Publishing message {message.message_id} to channel '{channel}'",
-            extra={"pipeline_run_id": message.pipeline_run_id}
+            extra={"pipeline_run_id": message.pipeline_run_id},
         )
-        callbacks = self.subscribers.get(channel, [])
-        for cb in callbacks:
+        for cb in self.subscribers.get(channel, []):
             try:
-                # Call callback asynchronously in the current loop if async, else call sync
                 if inspect.iscoroutinefunction(cb):
                     asyncio.create_task(cb(message))
                 else:
                     cb(message)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 self.logger.error(
                     f"[MOCK BAND] Callback error on channel '{channel}': {e}",
-                    extra={"pipeline_run_id": message.pipeline_run_id}
+                    extra={"pipeline_run_id": message.pipeline_run_id},
                 )
         return True
 
     def subscribe(self, channel: str, callback: Callable):
-        if channel not in self.subscribers:
-            self.subscribers[channel] = []
-        self.subscribers[channel].append(callback)
+        self.subscribers.setdefault(channel, []).append(callback)
         self.logger.info(f"[MOCK BAND] Subscribed callback {callback.__name__} to '{channel}'")
 
 
-class LiveBandClient:
-    """Live Thenvoi-SDK based publisher/subscriber."""
-
-    def __init__(self, api_key: str, agent_id: str, logger):
-        self.api_key = api_key
-        self.agent_id = agent_id
-        self.logger = logger
-        if not THENVOI_AVAILABLE:
-            raise BandClientError("thenvoi-sdk is not installed or importable.")
-        
-        try:
-            self.rest_client = RestClient(api_key=self.api_key)
-            self.logger.info("Initialized Live Thenvoi REST client.")
-        except Exception as e:
-            raise BandClientError("Failed to initialize Thenvoi RestClient", e)
-
-    def publish(self, channel: str, message: BandMessage) -> bool:
-        self.logger.info(
-            f"[LIVE BAND] Publishing message to chat room '{channel}'",
-            extra={"pipeline_run_id": message.pipeline_run_id}
-        )
-        try:
-            # Send message via REST API
-            self.rest_client.agent_api_messages.create_agent_chat_message(
-                chat_id=channel,
-                message=ChatMessageRequest(
-                    content=f"BandMessage: {message.model_dump_json()}",
-                )
-            )
-            return True
-        except Exception as e:
-            self.logger.error(
-                f"[LIVE BAND] Failed to publish message to channel '{channel}': {e}",
-                extra={"pipeline_run_id": message.pipeline_run_id}
-            )
-            raise BandClientError(f"Error publishing to {channel}", e)
-
-    def subscribe(self, channel: str, callback: Callable):
-        # In Live Mode, the Thenvoi Agent SDK handles websocket subscription via adapters.
-        # We register local callback bindings here to route platform events.
-        self.logger.info(f"[LIVE BAND] Subscribed callback {callback.__name__} to room '{channel}'")
-        # In a real environment, the framework adapter listens to messages on the room websocket,
-        # parses the content, and invokes the callbacks.
-        # For simplicity of our pipeline, we can keep a mapping of callbacks.
-        pass
-
-
 class BandClient:
-    """Top-level client wrapping Mock or Live implementations based on environment configuration."""
+    """Top-level client wrapping the Mock or Live transport based on config."""
 
-    def __init__(self, api_key: Optional[str] = None, agent_id: Optional[str] = None, logger=None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        logger=None,
+    ):
         self.logger = logger or get_logger("band_client")
-        
-        # Detect if we should use Mock Mode or Live Mode
-        is_placeholder = not api_key or "your_key" in api_key.lower() or "your_api" in api_key.lower()
-        
-        if is_placeholder:
-            self.logger.info("BAND_API_KEY is not configured or is a placeholder. Using MOCK offline mode.")
-            self.mode = "mock"
-            self.client = MockBandClient(self.logger)
-        else:
-            self.logger.info("BAND_API_KEY configured. Running in LIVE mode.")
-            self.mode = "live"
-            self.client = LiveBandClient(api_key, agent_id or "", self.logger)
 
+        explicit_live = bool(
+            api_key and "your_key" not in api_key.lower() and "your_api" not in api_key.lower()
+        )
+
+        if explicit_live or is_live_configured():
+            self.mode = "live"
+            room_id = os.getenv("BAND_ROOM_ID", "")
+            creds = load_creds_from_env()
+            if not creds and explicit_live:
+                # Legacy/explicit single-identity path: use the provided key for
+                # every role so the live client is constructible. Real multi-
+                # agent routing still prefers per-agent env credentials.
+                single = BandAgentCreds(name="orchestrator", api_key=api_key or "", agent_id=agent_id or "")
+                creds = {
+                    role: BandAgentCreds(name=role, api_key=api_key or "", agent_id=agent_id or "")
+                    for role in [
+                        "orchestrator", "agent1_forensic", "agent2_attribution",
+                        "agent3_impact", "agent4_postmortem",
+                    ]
+                }
+            self.logger.info(
+                f"Band running in LIVE mode (room={room_id or 'unset'}, "
+                f"{len(creds)} agent identities)."
+            )
+            self.client: Any = LiveBandClient(room_id=room_id, creds=creds, logger=self.logger)
+        else:
+            self.mode = "mock"
+            self.logger.info("Band running in MOCK offline mode (no live credentials configured).")
+            self.client = MockBandClient(self.logger)
+
+    # -- delegation --------------------------------------------------------
     def publish(self, channel: str, message: BandMessage) -> bool:
         try:
             return self.client.publish(channel, message)
-        except Exception as e:
-            if isinstance(e, BandClientError):
-                raise
+        except BandClientError:
+            raise
+        except Exception as e:  # noqa: BLE001
             raise BandClientError(f"Unexpected error in publish: {e}", e)
 
     def subscribe(self, channel: str, callback: Callable):
         try:
             self.client.subscribe(channel, callback)
-        except Exception as e:
-            if isinstance(e, BandClientError):
-                raise
+        except BandClientError:
+            raise
+        except Exception as e:  # noqa: BLE001
             raise BandClientError(f"Unexpected error in subscribe: {e}", e)
 
+    async def start(self) -> None:
+        """Open live Band connections (no-op in mock mode)."""
+        if self.mode == "live" and hasattr(self.client, "connect"):
+            await self.client.connect()
+
+    # -- context manager ---------------------------------------------------
     def __enter__(self):
         self.logger.info("Entering BandClient context.")
         return self

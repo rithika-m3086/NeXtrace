@@ -1,10 +1,12 @@
 import asyncio
+import os
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from core.client import BandClient
 from utils.log_filter import filter_log_sources, get_filter_stats
 from utils.chunker import chunk_log_sources, get_chunk_stats
+from utils.pii_masker import mask_log_sources
 from utils.rate_limiter import default_rate_limiter
 from core.message_types import BandMessage
 from core.coordinator import BandCoordinator
@@ -170,6 +172,23 @@ class PipelineOrchestrator:
         original_sources = payload.get("log_sources", [])
         filtered_sources = filter_log_sources(original_sources, chunk=False)
         stats = get_filter_stats(original_sources, filtered_sources)
+
+        # Privacy-by-design: redact secrets / PII BEFORE any payload leaves the
+        # box for the LLM provider. Deterministic tokens preserve correlation.
+        pii_disabled = os.getenv("DISABLE_PII_MASKING", "false").lower() == "true"
+        redaction_count = 0
+        if not pii_disabled:
+            filtered_sources, pii_mapping = mask_log_sources(filtered_sources)
+            redaction_count = len(pii_mapping)
+            self.state_manager.update_stage(
+                run_id,
+                "pii_masking",
+                {"redaction_count": redaction_count, "enabled": True},
+            )
+            self.client.logger.info(
+                f"PII pre-processor redacted {redaction_count} secret/PII value(s) before LLM dispatch",
+                extra={"pipeline_run_id": run_id},
+            )
 
         # Apply chunking
         chunked_sources = chunk_log_sources(filtered_sources)

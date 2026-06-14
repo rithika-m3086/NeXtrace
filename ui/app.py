@@ -17,15 +17,19 @@ if str(ROOT) not in sys.path:
 
 from core.client import BandClient
 from core.coordinator import BandCoordinator
+from core.live_band import is_live_configured
 from pipeline.orchestrator import PipelineOrchestrator
 from pipeline.state_manager import PipelineStateManager
 from schemas.input_schema import LogSource
+from ui.components.attack_map import render_attack_flow, render_geo_map
 from ui.components.attribution_view import render_attribution_view
 from ui.components.band_status import BandStatusMonitor, render_band_status_log, render_log_html
 from ui.components.impact_view import render_impact_view
 from ui.components.postmortem_view import render_postmortem_view
+from ui.components.summary_view import render_incident_summary
+from ui.components.ticket_export import render_ticket_export
 from ui.components.timeline_view import render_timeline_view
-from ui.styles.theme import inject_theme
+from ui.styles.theme import COLORS, inject_theme
 
 load_dotenv(ROOT / ".env")
 
@@ -113,6 +117,24 @@ def _load_custom_log_sources(
     return sources
 
 
+def _render_band_mode_badge() -> None:
+    """Show whether the app is coordinating over live Band or the local simulator."""
+    live = is_live_configured()
+    if live:
+        color, label, detail = COLORS["success"], "LIVE · Band", "Agents coordinating through a Band chat room"
+    else:
+        color, label, detail = COLORS["warning"], "MOCK · Local bus", "Offline simulator (set Band creds for live mode)"
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;'
+        f'border:1px solid {color}55;border-radius:8px;background:{color}14;margin-bottom:0.75rem;">'
+        f'<span style="width:9px;height:9px;border-radius:50%;background:{color};'
+        f'box-shadow:0 0 8px {color};"></span>'
+        f'<div><div style="font-family:monospace;font-weight:600;color:{color};font-size:0.8rem;">'
+        f'{label}</div><div style="font-size:0.68rem;color:#8b949e;">{detail}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _build_metadata(org_name: str, enable_soc2: bool, enable_hipaa: bool) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {
         "state": "CA",
@@ -155,6 +177,12 @@ async def _run_pipeline_with_live_log(
                 
             await asyncio.sleep(0.25)
 
+    # In live mode, open the Band WebSocket connections concurrently so agents
+    # actually receive their @mentions. No-op in mock mode.
+    connect_task = None
+    if getattr(orchestrator.client, "mode", "mock") == "live":
+        connect_task = asyncio.create_task(orchestrator.client.start())
+
     refresh_task = asyncio.create_task(refresh_loop())
     try:
         result = await orchestrator.run_pipeline(
@@ -164,6 +192,8 @@ async def _run_pipeline_with_live_log(
         )
     finally:
         refresh_task.cancel()
+        if connect_task is not None:
+            connect_task.cancel()
         try:
             await refresh_task
         except asyncio.CancelledError:
@@ -236,6 +266,7 @@ def main() -> None:
     st.caption("Multi-agent security incident intelligence · Band-coordinated pipeline")
 
     with st.sidebar:
+        _render_band_mode_badge()
         st.header("Investigation Controls")
         org_name = st.text_input("Organization name", value="Acme Corp")
         scenario = st.selectbox("Scenario", options=list(SCENARIOS.keys()))
@@ -330,6 +361,10 @@ def main() -> None:
 
         stages = result.get("stages", {})
 
+        # Top-of-report verdict: overall severity + agent confidence.
+        summary = render_incident_summary(stages)
+        st.divider()
+
         tab_timeline, tab_attribution, tab_impact, tab_postmortem = st.tabs(
             ["Forensic Timeline", "Attack Attribution", "Impact & Compliance", "Post-Mortem"]
         )
@@ -337,10 +372,19 @@ def main() -> None:
             render_timeline_view(stages.get("forensic_timeline"))
         with tab_attribution:
             render_attribution_view(stages.get("attack_attribution"))
+            attribution_data = stages.get("attack_attribution")
+            if attribution_data:
+                st.divider()
+                render_attack_flow(attribution_data)
+                st.divider()
+                render_geo_map(stages)
         with tab_impact:
             render_impact_view(stages.get("impact_assessment"))
         with tab_postmortem:
             render_postmortem_view(stages.get("postmortem_complete"))
+            if stages.get("postmortem_complete"):
+                st.divider()
+                render_ticket_export(stages, run_id or "", summary=summary, org_name=org_name)
     elif not st.session_state.investigation_running:
         st.info("Configure settings in the sidebar and click **Run Investigation** to start.")
 
