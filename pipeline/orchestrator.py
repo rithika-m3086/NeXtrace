@@ -3,6 +3,9 @@ from typing import Any, Dict, Optional
 from uuid import uuid4
 
 from core.client import BandClient
+from utils.log_filter import filter_log_sources, get_filter_stats
+from utils.chunker import chunk_log_sources, get_chunk_stats
+from utils.rate_limiter import default_rate_limiter
 from core.message_types import BandMessage
 from core.coordinator import BandCoordinator
 from pipeline.state_manager import PipelineStateManager
@@ -78,14 +81,20 @@ class PipelineOrchestrator:
         def on_timeline(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
                 self.state_manager.update_stage(run_id, "forensic_timeline", msg.payload)
+                stats = default_rate_limiter.get_stats()
+                self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
 
         def on_attribution(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
                 self.state_manager.update_stage(run_id, "attack_attribution", msg.payload)
+                stats = default_rate_limiter.get_stats()
+                self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
 
         def on_impact(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
                 self.state_manager.update_stage(run_id, "impact_assessment", msg.payload)
+                stats = default_rate_limiter.get_stats()
+                self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
 
         def on_postmortem(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
@@ -93,6 +102,8 @@ class PipelineOrchestrator:
                 self.state_manager.mark_complete(run_id, msg.payload)
                 result_container["status"] = "completed"
                 result_container["data"] = msg.payload
+                stats = default_rate_limiter.get_stats()
+                self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
                 completion_event.set()
 
         def on_error(msg: BandMessage):
@@ -123,6 +134,28 @@ class PipelineOrchestrator:
         agent4.run()
 
         # Publish initial raw logs message to kick-off pipeline
+        payload = input_data.model_dump(mode="json")
+        original_sources = payload.get("log_sources", [])
+        filtered_sources = filter_log_sources(original_sources, chunk=False)
+        stats = get_filter_stats(original_sources, filtered_sources)
+
+        # Apply chunking
+        chunked_sources = chunk_log_sources(filtered_sources)
+        chunk_stats = get_chunk_stats(filtered_sources, chunked_sources)
+        payload["log_sources"] = chunked_sources
+
+        # Log filter statistics
+        self.client.logger.info(
+            f"SIEM pre-filter execution stats: {stats}",
+            extra={"pipeline_run_id": run_id}
+        )
+
+        # Log chunk statistics
+        self.client.logger.info(
+            f"Context window protection chunk stats: {chunk_stats}",
+            extra={"pipeline_run_id": run_id}
+        )
+
         initial_msg = BandMessage.create(
             pipeline_run_id=run_id,
             agent_id="orchestrator",
@@ -130,7 +163,7 @@ class PipelineOrchestrator:
             sequence=1,
             status="success",
             confidence=1.0,
-            payload=input_data.model_dump(mode="json"),
+            payload=payload,
         )
 
         self.client.publish("raw_evidence_input", initial_msg)
