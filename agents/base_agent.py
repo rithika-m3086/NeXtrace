@@ -36,13 +36,13 @@ class BaseAgent(ABC):
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
         aiml_key = os.getenv("AIML_API_KEY")
 
-        if openrouter_key and "your_key" not in openrouter_key:
+        if openrouter_key and not openrouter_key.startswith("your_"):
             self.logger.info("BaseAgent: Configuring LLM client for OpenRouter")
             return OpenAI(
                 api_key=openrouter_key,
                 base_url="https://openrouter.ai/api/v1",
             )
-        elif aiml_key and "your_key" not in aiml_key:
+        elif aiml_key and not aiml_key.startswith("your_"):
             self.logger.info("BaseAgent: Configuring LLM client for AIML API")
             return OpenAI(
                 api_key=aiml_key,
