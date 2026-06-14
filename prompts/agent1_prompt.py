@@ -41,6 +41,13 @@ def get_system_prompt() -> str:
     )
 
 
+class PromptString(str):
+    def __new__(cls, value, estimated_tokens=0):
+        obj = super().__new__(cls, value)
+        obj.estimated_tokens = estimated_tokens
+        return obj
+
+
 def build_prompt(raw_evidence_input: Dict[str, Any]) -> str:
     """Builds user prompt based on RawEvidenceInput fields."""
     org_name = raw_evidence_input.get("organization_name", "Unknown")
@@ -59,10 +66,20 @@ def build_prompt(raw_evidence_input: Dict[str, Any]) -> str:
         )
     sources_str = "\n\n".join(sources_str_list)
 
-    return (
+    assert len(sources_str) < 50000, \
+        f"Prompt too large: {len(sources_str)} chars"
+
+    prompt_str = (
         f"ORGANIZATION: {org_name}\n"
         f"INCIDENT CONTEXT (may be empty): {incident_desc}\n\n"
         "RAW LOG SOURCES:\n"
         f"{sources_str}\n\n"
         "Produce the forensic timeline JSON now."
     )
+
+    from utils.logger import get_logger
+    logger = get_logger("agent1_prompt")
+    estimated_tokens = len(prompt_str) // 4
+    logger.debug(f"Estimated prompt tokens: {estimated_tokens}")
+
+    return PromptString(prompt_str, estimated_tokens=estimated_tokens)
