@@ -19,13 +19,29 @@ class AttackAttributionAgent(BaseAgent):
 
     async def process(self, input_message: BandMessage) -> BandMessage:
         self.logger.info("Agent 2 processing forensic timeline...")
+
+        # Propagate upstream error if any
+        if input_message.status == "error":
+            err_msg = input_message.payload.get("error_message", "Unknown upstream error")
+            self.logger.error(f"Agent 2 received upstream error: {err_msg}")
+            return BandMessage.create(
+                pipeline_run_id=input_message.pipeline_run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={
+                    "status": "error",
+                    "error_message": f"Upstream error: {err_msg}"
+                }
+            )
+
         # Payload of input message contains the ForensicTimeline JSON
         timeline_data = json.dumps(input_message.payload)
-
         prompt = prompt_mod.build_prompt(timeline_data, input_message.confidence)
         system_prompt = prompt_mod.get_system_prompt()
 
-        # Call model with self-correcting schema validator
         try:
             report: AttributionReport = self._call_model_json(
                 prompt=prompt,
@@ -33,62 +49,35 @@ class AttackAttributionAgent(BaseAgent):
                 system_prompt=system_prompt,
                 run_id=input_message.pipeline_run_id,
             )
-        except Exception as e:
-            self.logger.warning(
-                f"Agent 2 model validation failed: {e}. Attempting fallback for sparse/malformed logs.",
+            self.logger.info(
+                f"Agent 2 successfully mapped {len(report.attack_chain)} attack chain steps.",
                 extra={"pipeline_run_id": input_message.pipeline_run_id}
             )
-            from datetime import datetime, timezone
-            from schemas.attribution_schema import AttackClassification, EntryPoint, AttackChainStep, LateralMovement, DataTargeted
-            now = datetime.now(timezone.utc)
-            report = AttributionReport(
+            return BandMessage.create(
                 pipeline_run_id=input_message.pipeline_run_id,
-                created_at=now,
-                confidence_score=0.1,
-                attack_classification=AttackClassification(
-                    attack_type="unknown",
-                    threat_actor_type="unknown",
-                    sophistication_level="low"
-                ),
-                entry_point=EntryPoint(
-                    identified=False,
-                    resource="unknown",
-                    method="unknown",
-                    vulnerability_description="No identifiable entry point due to lack of log evidence."
-                ),
-                attack_chain=[
-                    AttackChainStep(
-                        step=1,
-                        description="No clear security events detected to construct attack chain.",
-                        mitre_technique_id="T1078",
-                        mitre_technique_name="Valid Accounts",
-                        mitre_tactic="Initial Access"
-                    )
-                ],
-                lateral_movement=LateralMovement(
-                    detected=False,
-                    systems_traversed=[]
-                ),
-                data_targeted=DataTargeted(
-                    likely_target="unknown",
-                    evidence="No data exfiltration evidence found in logs."
-                ),
-                indicators_of_compromise=[],
-                agent_notes="Failed to generate attribution report from sparse/malformed inputs."
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="success",
+                confidence=report.confidence_score,
+                payload=report.model_dump(mode="json"),
             )
-
-        self.logger.info(
-            f"Agent 2 successfully mapped {len(report.attack_chain)} attack chain steps.",
-            extra={"pipeline_run_id": input_message.pipeline_run_id}
-        )
-
-        # Build output message
-        return BandMessage.create(
-            pipeline_run_id=input_message.pipeline_run_id,
-            agent_id=self.agent_id,
-            channel=self.output_channel,
-            sequence=input_message.sequence + 1,
-            status="success",
-            confidence=report.confidence_score,
-            payload=report.model_dump(mode="json"),
-        )
+        except Exception as e:
+            import traceback
+            error_details = f"{type(e).__name__}: {e}"
+            self.logger.error(
+                f"Agent 2 (AttackAttributionAgent) failed: {error_details}\n{traceback.format_exc()}",
+                extra={"pipeline_run_id": input_message.pipeline_run_id}
+            )
+            return BandMessage.create(
+                pipeline_run_id=input_message.pipeline_run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={
+                    "status": "error",
+                    "error_message": f"Agent 2 failed: {error_details}"
+                }
+            )

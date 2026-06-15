@@ -253,45 +253,40 @@ class BaseAgent(ABC):
 
         self.logger.info(f"BaseAgent: Calling LLM (model={model}) with estimated {estimated_tokens} tokens")
 
-        max_attempts = 2
-        for attempt in range(max_attempts):
-            try:
-                response = call_with_retry(
-                    self.openai_client.chat.completions.create,
-                    model=model,
-                    messages=messages,
-                    temperature=0.1,
-                    estimated_tokens=estimated_tokens,
-                    timeout=60.0,
+        try:
+            response = call_with_retry(
+                self.openai_client.chat.completions.create,
+                model=model,
+                messages=messages,
+                temperature=0.1,
+                estimated_tokens=estimated_tokens,
+                timeout=60.0,
+                logger=self.logger,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            error_msg = f"LLM call failed: {e}"
+            self.logger.error(
+                f"BaseAgent '{self.agent_id}': {error_msg} (All retry attempts failed)",
+                extra={"pipeline_run_id": run_id} if run_id else {}
+            )
+            
+            if run_id:
+                err_msg = BandMessage.create(
+                    pipeline_run_id=run_id,
+                    agent_id=self.agent_id,
+                    channel="pipeline_errors",
+                    sequence=999,
+                    status="error",
+                    confidence=0.0,
+                    payload={
+                        "error": error_msg,
+                        "stage": self.output_channel,
+                        "transient": False
+                    }
                 )
-                return response.choices[0].message.content or ""
-            except Exception as e:
-                error_msg = f"LLM call failed: {e}"
-                self.logger.warning(
-                    f"BaseAgent '{self.agent_id}': {error_msg} (Attempt {attempt+1}/{max_attempts})",
-                    extra={"pipeline_run_id": run_id} if run_id else {}
-                )
-                
-                is_transient = (attempt < max_attempts - 1)
-                if run_id:
-                    err_msg = BandMessage.create(
-                        pipeline_run_id=run_id,
-                        agent_id=self.agent_id,
-                        channel="pipeline_errors",
-                        sequence=999,
-                        status="error",
-                        confidence=0.0,
-                        payload={
-                            "error": f"{error_msg} (Retrying...)" if is_transient else error_msg,
-                            "stage": self.output_channel,
-                            "transient": is_transient
-                        }
-                    )
-                    self.band_client.publish("pipeline_errors", err_msg)
-                
-                if not is_transient:
-                    raise e
-                time.sleep(1.0)
+                self.band_client.publish("pipeline_errors", err_msg)
+            raise e
 
     def _sanitize_json_arithmetic(self, json_str: str) -> str:
         """Evaluates simple arithmetic expressions in raw JSON values (e.g. confidence scores)."""
@@ -371,15 +366,26 @@ class BaseAgent(ABC):
                 model_instance = response_model.model_validate(data)
                 return model_instance
             except (json.JSONDecodeError, ValidationError) as e:
-                # Log raw output at ERROR level
-                self.logger.error(
-                    f"BaseAgent: JSON parsing/validation failed on attempt {attempt+1}/2: {e}\n"
-                    f"Raw response was: {raw_response}"
-                )
                 if attempt == 0:
-                    # Retry once with exact instruction
-                    current_prompt += "\n\nYour previous response was not valid JSON. Respond with ONLY the JSON object."
+                    # Log first failure as warning with a 300-char truncated response snippet
+                    truncated = raw_response[:300] + ("..." if len(raw_response) > 300 else "")
+                    self.logger.warning(
+                        f"BaseAgent: JSON parsing/validation failed on attempt 1/2: {e}\n"
+                        f"Truncated response (first 300 chars): {truncated}"
+                    )
+                    # Retry once with exact instruction and specific error details
+                    error_details = str(e)
+                    current_prompt += (
+                        f"\n\nYour previous response was not valid JSON or did not conform to the schema.\n"
+                        f"Error encountered: {error_details}\n"
+                        f"Please fix this error and respond with ONLY the corrected JSON object."
+                    )
                 else:
+                    # Log the final failure as error with the full raw response
+                    self.logger.error(
+                        f"BaseAgent: JSON parsing/validation failed on attempt 2/2: {e}\n"
+                        f"Raw response was: {raw_response}"
+                    )
                     # Second failure raises error caught by run()
                     raise RuntimeError(f"BaseAgent: Failed to generate valid JSON schema for {response_model.__name__} after 2 attempts: {e}")
 

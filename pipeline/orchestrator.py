@@ -127,12 +127,35 @@ class PipelineOrchestrator:
         }
 
         # Setup message interceptors to capture intermediate output states
+        def handle_agent_error(msg: BandMessage):
+            error_msg = msg.payload.get("error_message", "Unknown agent error")
+            self.state_manager.mark_failed(run_id, error_msg)
+            self.state_manager.save_to_disk(run_id)
+            result_container["status"] = "failed"
+            result_container["error"] = f"{msg.agent_id} failed: {error_msg}"
+            
+            # Publish to pipeline_errors so the UI monitor receives it
+            err_msg = BandMessage.create(
+                pipeline_run_id=run_id,
+                agent_id="orchestrator",
+                channel="pipeline_errors",
+                sequence=msg.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={"error": error_msg, "stage": msg.channel}
+            )
+            self.client.publish("pipeline_errors", err_msg)
+            completion_event.set()
+
         def on_timeline(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
                 self.state_manager.update_stage(run_id, "forensic_timeline", msg.payload)
                 self.state_manager.save_to_disk(run_id)
                 stats = default_rate_limiter.get_stats()
                 self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
+                if msg.status == "error":
+                    handle_agent_error(msg)
+                    return
                 if stop_after == "forensic_timeline":
                     result_container["status"] = "paused"
                     completion_event.set()
@@ -143,6 +166,9 @@ class PipelineOrchestrator:
                 self.state_manager.save_to_disk(run_id)
                 stats = default_rate_limiter.get_stats()
                 self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
+                if msg.status == "error":
+                    handle_agent_error(msg)
+                    return
                 if stop_after == "attack_attribution":
                     result_container["status"] = "paused"
                     completion_event.set()
@@ -153,6 +179,9 @@ class PipelineOrchestrator:
                 self.state_manager.save_to_disk(run_id)
                 stats = default_rate_limiter.get_stats()
                 self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
+                if msg.status == "error":
+                    handle_agent_error(msg)
+                    return
                 if stop_after == "impact_assessment":
                     result_container["status"] = "paused"
                     completion_event.set()
@@ -160,12 +189,15 @@ class PipelineOrchestrator:
         def on_postmortem(msg: BandMessage):
             if msg.pipeline_run_id == run_id:
                 self.state_manager.update_stage(run_id, "postmortem_complete", msg.payload)
+                stats = default_rate_limiter.get_stats()
+                self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
+                if msg.status == "error":
+                    handle_agent_error(msg)
+                    return
                 self.state_manager.mark_complete(run_id, msg.payload)
                 self.state_manager.save_to_disk(run_id)
                 result_container["status"] = "completed"
                 result_container["data"] = msg.payload
-                stats = default_rate_limiter.get_stats()
-                self.client.logger.debug(f"Rate limiter stats after agent call: {stats}", extra={"pipeline_run_id": run_id})
                 completion_event.set()
 
         def on_error(msg: BandMessage):

@@ -65,6 +65,10 @@ def inject_theme() -> None:
         color: {COLORS["text_primary"]};
     }}
 
+    header[data-testid="stHeader"] {{
+        background-color: transparent !important;
+    }}
+
     [data-testid="stSidebar"] {{
         background-color: {COLORS["bg_panel"]};
         border-right: 1px solid {COLORS["border"]};
@@ -311,6 +315,61 @@ def inject_theme() -> None:
         border: 1px solid {COLORS["border"]};
         border-radius: 8px;
         padding: 0.75rem;
+    }}
+
+    /* Dropdown / Selectbox styling */
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="select"] ul {{
+        background-color: {COLORS["bg_panel"]} !important;
+        border-color: {COLORS["border"]} !important;
+        color: {COLORS["text_primary"]} !important;
+    }}
+    div[data-baseweb="select"] li {{
+        background-color: {COLORS["bg_panel"]} !important;
+        color: {COLORS["text_primary"]} !important;
+    }}
+    div[data-baseweb="select"] li:hover {{
+        background-color: {COLORS["bg_elevated"]} !important;
+    }}
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] svg {{
+        color: {COLORS["text_primary"]} !important;
+    }}
+
+    /* Text input / Text area styling */
+    div[data-testid="stTextInput"] > div,
+    div[data-testid="stTextArea"] > div,
+    div[data-baseweb="base-input"],
+    div[data-baseweb="input"] {{
+        background-color: {COLORS["bg_panel"]} !important;
+        border-color: {COLORS["border"]} !important;
+        color: {COLORS["text_primary"]} !important;
+    }}
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stTextArea"] textarea,
+    div[data-baseweb="base-input"] input,
+    div[data-baseweb="input"] input,
+    div[data-baseweb="textarea"] textarea {{
+        background-color: transparent !important;
+        color: {COLORS["text_primary"]} !important;
+    }}
+
+    /* Radio choices & checkbox text color */
+    div[data-testid="stRadio"] label,
+    div[data-testid="stRadio"] label p,
+    div[data-testid="stCheckbox"] label,
+    div[data-testid="stCheckbox"] label p,
+    div[data-testid="stToggle"] label,
+    div[data-testid="stToggle"] label p {{
+        color: {COLORS["text_primary"]} !important;
+    }}
+
+    /* Widget labels */
+    div[data-testid="stWidgetLabel"] p,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] label p,
+    [data-testid="stSidebar"] div[data-testid="stWidgetLabel"] p {{
+        color: {COLORS["text_secondary"]} !important;
     }}
     </style>
     """

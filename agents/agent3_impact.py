@@ -23,12 +23,28 @@ class ImpactAssessmentAgent(BaseAgent):
     async def process(self, input_message: BandMessage) -> BandMessage:
         self.logger.info("Agent 3 processing attribution report...")
         run_id = input_message.pipeline_run_id
-        attribution_data = json.dumps(input_message.payload)
 
+        # Propagate upstream error if any
+        if input_message.status == "error":
+            err_msg = input_message.payload.get("error_message", "Unknown upstream error")
+            self.logger.error(f"Agent 3 received upstream error: {err_msg}")
+            return BandMessage.create(
+                pipeline_run_id=run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={
+                    "status": "error",
+                    "error_message": f"Upstream error: {err_msg}"
+                }
+            )
+
+        attribution_data = json.dumps(input_message.payload)
         prompt = prompt_mod.build_prompt(attribution_data, input_message.confidence)
         system_prompt = prompt_mod.get_system_prompt()
 
-        # Call model with self-correcting schema validator
         try:
             assessment: ImpactAssessment = self._call_model_json(
                 prompt=prompt,
@@ -36,73 +52,52 @@ class ImpactAssessmentAgent(BaseAgent):
                 system_prompt=system_prompt,
                 run_id=run_id,
             )
-        except Exception as e:
-            self.logger.warning(
-                f"Agent 3 model validation failed: {e}. Attempting fallback for sparse/malformed logs.",
+            # Retrieve organization metadata from raw evidence input
+            raw_input = self.state_manager.get_stage(run_id, "raw_evidence_input") or {}
+            metadata = raw_input.get("metadata", {})
+
+            # Deterministically evaluate compliance regulations
+            categories = assessment.blast_radius.data_categories_exposed
+            self.logger.info(
+                f"Agent 3: Evaluating compliance for categories: {categories} with metadata: {metadata}",
                 extra={"pipeline_run_id": run_id}
             )
-            from datetime import datetime, timezone
-            from schemas.impact_schema import BlastRadius, BusinessImpact, RootCauseFactor
-            now = datetime.now(timezone.utc)
-            assessment = ImpactAssessment(
-                pipeline_run_id=run_id,
-                created_at=now,
-                confidence_score=0.1,
-                blast_radius=BlastRadius(
-                    systems_compromised=["unknown"],
-                    systems_compromised_count=0,
-                    users_affected=[],
-                    users_affected_count=0,
-                    estimated_records_exposed=-1,
-                    data_categories_exposed=["unknown"]
-                ),
-                business_impact=BusinessImpact(
-                    severity="low",
-                    estimated_downtime_minutes=0,
-                    revenue_impact="none",
-                    reputational_risk="low",
-                    description="No significant business impact detected due to lack of evidence."
-                ),
-                compliance_flags=[],
-                root_cause_factors=[
-                    RootCauseFactor(
-                        factor="Insufficient log data or malformed evidence",
-                        category="process",
-                        contributing_weight="minor"
-                    )
-                ],
-                agent_notes="Failed to generate impact assessment from sparse/malformed inputs."
+            compliance_dicts = evaluate_compliance(categories, metadata)
+
+            # Merge compliance flags back into Pydantic model
+            assessment.compliance_flags = [
+                ComplianceFlag.model_validate(flag) for flag in compliance_dicts
+            ]
+
+            self.logger.info(
+                f"Agent 3 successfully merged {len(assessment.compliance_flags)} compliance flags.",
+                extra={"pipeline_run_id": run_id}
             )
-
-        # Retrieve organization metadata from raw evidence input
-        raw_input = self.state_manager.get_stage(run_id, "raw_evidence_input") or {}
-        metadata = raw_input.get("metadata", {})
-
-        # Deterministically evaluate compliance regulations
-        categories = assessment.blast_radius.data_categories_exposed
-        self.logger.info(
-            f"Agent 3: Evaluating compliance for categories: {categories} with metadata: {metadata}",
-            extra={"pipeline_run_id": run_id}
-        )
-        compliance_dicts = evaluate_compliance(categories, metadata)
-
-        # Merge compliance flags back into Pydantic model
-        assessment.compliance_flags = [
-            ComplianceFlag.model_validate(flag) for flag in compliance_dicts
-        ]
-
-        self.logger.info(
-            f"Agent 3 successfully merged {len(assessment.compliance_flags)} compliance flags.",
-            extra={"pipeline_run_id": run_id}
-        )
-
-        # Build output message
-        return BandMessage.create(
-            pipeline_run_id=run_id,
-            agent_id=self.agent_id,
-            channel=self.output_channel,
-            sequence=input_message.sequence + 1,
-            status="success",
-            confidence=assessment.confidence_score,
-            payload=assessment.model_dump(mode="json"),
-        )
+            return BandMessage.create(
+                pipeline_run_id=run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="success",
+                confidence=assessment.confidence_score,
+                payload=assessment.model_dump(mode="json"),
+            )
+        except Exception as e:
+            import traceback
+            error_details = f"{type(e).__name__}: {e}"
+            self.logger.error(
+                f"Agent 3 (ImpactAssessmentAgent) failed: {error_details}\n{traceback.format_exc()}",
+                extra={"pipeline_run_id": run_id}
+            )
+            return BandMessage.create(
+                pipeline_run_id=run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={
+                    "status": "error",
+                    "error_message": f"Agent 3 failed: {error_details}"
+                }
+            )

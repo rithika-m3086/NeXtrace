@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +33,19 @@ from ui.components.timeline_view import render_timeline_view
 from ui.styles.theme import COLORS, inject_theme
 
 load_dotenv(ROOT / ".env")
+
+# Startup check for API key presence
+import os
+aiml_key = os.getenv("AIML_API_KEY")
+if aiml_key:
+    if aiml_key.startswith("your_"):
+        aiml_status = "Placeholder (starts with your_)"
+    else:
+        aiml_status = f"Present (last 4: ...{aiml_key[-4:]})"
+else:
+    aiml_status = "Absent"
+print(f"[STARTUP CHECK] AIML_API_KEY is {aiml_status}")
+
 
 SCENARIOS: Dict[str, List[Dict[str, str]]] = {
     "API Key Leak (GitHub + CloudTrail + S3)": [
@@ -279,6 +293,17 @@ def main() -> None:
     with st.sidebar:
         _render_band_mode_badge()
 
+        # Check API Keys and Model Config
+        aiml_key = os.getenv("AIML_API_KEY")
+        model_name = os.getenv("MODEL_NAME")
+        keys_missing = not aiml_key or aiml_key.startswith("your_") or not model_name
+
+        if keys_missing:
+            if not aiml_key or aiml_key.startswith("your_"):
+                st.error("🛑 AIML_API_KEY not loaded — the app cannot run investigations. Please configure it in your `.env` file.")
+            if not model_name:
+                st.error("🛑 MODEL_NAME not set — the app cannot run investigations. Please configure it in your `.env` file.")
+
         # Resume Controls
         state_mgr = PipelineStateManager()
         saved_runs = state_mgr.list_saved_runs()
@@ -300,7 +325,7 @@ def main() -> None:
             )
             if selected_resume != "-- Select a run --":
                 resume_run_id = selected_resume
-                resume_clicked = st.button("Resume Selected Run", type="primary", use_container_width=True)
+                resume_clicked = st.button("Resume Selected Run", type="primary", use_container_width=True, disabled=keys_missing)
                 st.divider()
 
         st.header("Investigation Controls")
@@ -336,7 +361,7 @@ def main() -> None:
         # Staged review toggle
         skip_review = st.toggle("Skip review / run straight through", value=True)
 
-        run_clicked = st.button("Run Investigation", type="primary", use_container_width=True)
+        run_clicked = st.button("Run Investigation", type="primary", use_container_width=True, disabled=keys_missing)
 
     st.subheader("Live Band Coordination Log")
     alert_placeholder = st.empty()
@@ -490,8 +515,6 @@ def main() -> None:
                                 validated = ForensicTimeline.model_validate(timeline_payload)
                                 new_payload = validated.model_dump(mode="json")
                                 
-                                import os
-                                import json
                                 filepath = os.path.join("outputs", f"{run_id}.json")
                                 if os.path.exists(filepath):
                                     with open(filepath, "r", encoding="utf-8") as f:
@@ -535,30 +558,68 @@ def main() -> None:
 
         stages = result.get("stages", {})
 
-        # Top-of-report verdict: overall severity + agent confidence.
-        summary = render_incident_summary(stages)
-        st.divider()
+        # Check for failed agent/stage
+        failed_agent_name = None
+        failed_reason = None
+        failed_stage = None
+        stage_agents = {
+            "forensic_timeline": ("Agent 1 (Forensic)", "forensic_timeline"),
+            "attack_attribution": ("Agent 2 (Attribution)", "attack_attribution"),
+            "impact_assessment": ("Agent 3 (Impact)", "impact_assessment"),
+            "postmortem_complete": ("Agent 4 (Post-Mortem)", "postmortem_complete"),
+        }
+        for stage_name, (agent_title, _) in stage_agents.items():
+            stage_data = stages.get(stage_name)
+            if stage_data and isinstance(stage_data, dict) and stage_data.get("status") == "error":
+                failed_stage = stage_name
+                failed_agent_name = agent_title
+                failed_reason = stage_data.get("error_message")
+                break
 
-        tab_timeline, tab_attribution, tab_impact, tab_postmortem = st.tabs(
-            ["Forensic Timeline", "Attack Attribution", "Impact & Compliance", "Post-Mortem"]
-        )
-        with tab_timeline:
-            render_timeline_view(stages.get("forensic_timeline"))
-        with tab_attribution:
-            render_attribution_view(stages.get("attack_attribution"))
-            attribution_data = stages.get("attack_attribution")
-            if attribution_data:
-                st.divider()
-                render_attack_flow(attribution_data)
-                st.divider()
-                render_geo_map(stages)
-        with tab_impact:
-            render_impact_view(stages.get("impact_assessment"))
-        with tab_postmortem:
-            render_postmortem_view(stages.get("postmortem_complete"))
-            if stages.get("postmortem_complete"):
-                st.divider()
-                render_ticket_export(stages, run_id or "", summary=summary, org_name=org_name)
+        # Display agent failure banner if found
+        if failed_agent_name:
+            st.error(f"❌ {failed_agent_name} failed: {failed_reason}. Investigation halted — results below are incomplete.")
+
+        # Top-of-report verdict: overall severity + agent confidence. Only render if Agent 1 at least succeeded
+        timeline_data = stages.get("forensic_timeline")
+        if timeline_data and isinstance(timeline_data, dict) and timeline_data.get("status") != "error":
+            summary = render_incident_summary(stages)
+            st.divider()
+
+            tab_timeline, tab_attribution, tab_impact, tab_postmortem = st.tabs(
+                ["Forensic Timeline", "Attack Attribution", "Impact & Compliance", "Post-Mortem"]
+            )
+            with tab_timeline:
+                render_timeline_view(timeline_data)
+                
+            with tab_attribution:
+                attribution_data = stages.get("attack_attribution")
+                if attribution_data and isinstance(attribution_data, dict) and attribution_data.get("status") != "error":
+                    render_attribution_view(attribution_data)
+                    st.divider()
+                    render_attack_flow(attribution_data)
+                    st.divider()
+                    render_geo_map(stages)
+                else:
+                    st.info("No Attack Attribution findings available due to stage/upstream failure.")
+                    
+            with tab_impact:
+                impact_data = stages.get("impact_assessment")
+                if impact_data and isinstance(impact_data, dict) and impact_data.get("status") != "error":
+                    render_impact_view(impact_data)
+                else:
+                    st.info("No Impact & Compliance findings available due to stage/upstream failure.")
+                    
+            with tab_postmortem:
+                postmortem_data = stages.get("postmortem_complete")
+                if postmortem_data and isinstance(postmortem_data, dict) and postmortem_data.get("status") != "error":
+                    render_postmortem_view(postmortem_data)
+                    st.divider()
+                    render_ticket_export(stages, run_id or "", summary=summary, org_name=org_name)
+                else:
+                    st.info("No Post-Mortem findings available due to stage/upstream failure.")
+        else:
+            st.warning("No forensic timeline findings available due to Agent 1 (Forensic) failure.")
     elif not st.session_state.investigation_running:
         st.info("Configure settings in the sidebar and click **Run Investigation** to start.")
 

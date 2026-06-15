@@ -18,10 +18,27 @@ class ForensicEvidenceAgent(BaseAgent):
 
     async def process(self, input_message: BandMessage) -> BandMessage:
         self.logger.info("Agent 1 processing raw log evidence...")
+
+        # Propagate upstream error if any
+        if input_message.status == "error":
+            err_msg = input_message.payload.get("error_message", "Unknown upstream error")
+            self.logger.error(f"Agent 1 received upstream error: {err_msg}")
+            return BandMessage.create(
+                pipeline_run_id=input_message.pipeline_run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={
+                    "status": "error",
+                    "error_message": f"Upstream error: {err_msg}"
+                }
+            )
+
         prompt = prompt_mod.build_prompt(input_message.payload)
         system_prompt = prompt_mod.get_system_prompt()
 
-        # Call model with self-correcting schema validator
         try:
             timeline: ForensicTimeline = self._call_model_json(
                 prompt=prompt,
@@ -29,50 +46,35 @@ class ForensicEvidenceAgent(BaseAgent):
                 system_prompt=system_prompt,
                 run_id=input_message.pipeline_run_id,
             )
-        except Exception as e:
-            self.logger.warning(
-                f"Agent 1 model validation failed: {e}. Attempting fallback for sparse/malformed logs.",
+            self.logger.info(
+                f"Agent 1 successfully parsed {len(timeline.events)} events on timeline.",
                 extra={"pipeline_run_id": input_message.pipeline_run_id}
             )
-            from datetime import datetime, timezone
-            from schemas.timeline_schema import TimelineEvent
-            now = datetime.now(timezone.utc)
-            fallback_event = TimelineEvent(
-                timestamp=now,
-                event_type="unknown",
-                target_resource="unknown",
-                action="no_detectable_events",
-                outcome="unknown",
-                severity="low",
-                raw_log_reference="No security-relevant logs detected or logs are malformed.",
-                flags=["insufficient_evidence"]
-            )
-            timeline = ForensicTimeline(
-                incident_id="inc-unknown",
+            return BandMessage.create(
                 pipeline_run_id=input_message.pipeline_run_id,
-                created_at=now,
-                confidence_score=0.1,
-                raw_event_count=0,
-                filtered_event_count=0,
-                timeline_start=now,
-                timeline_end=now,
-                events=[fallback_event],
-                affected_systems=["unknown"],
-                agent_notes="Failed to parse logs or logs contain insufficient evidence."
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="success",
+                confidence=timeline.confidence_score,
+                payload=timeline.model_dump(mode="json"),
             )
-
-        self.logger.info(
-            f"Agent 1 successfully parsed {len(timeline.events)} events on timeline.",
-            extra={"pipeline_run_id": input_message.pipeline_run_id}
-        )
-
-        # Build output message
-        return BandMessage.create(
-            pipeline_run_id=input_message.pipeline_run_id,
-            agent_id=self.agent_id,
-            channel=self.output_channel,
-            sequence=input_message.sequence + 1,
-            status="success",
-            confidence=timeline.confidence_score,
-            payload=timeline.model_dump(mode="json"),
-        )
+        except Exception as e:
+            import traceback
+            error_details = f"{type(e).__name__}: {e}"
+            self.logger.error(
+                f"Agent 1 (ForensicEvidenceAgent) failed: {error_details}\n{traceback.format_exc()}",
+                extra={"pipeline_run_id": input_message.pipeline_run_id}
+            )
+            return BandMessage.create(
+                pipeline_run_id=input_message.pipeline_run_id,
+                agent_id=self.agent_id,
+                channel=self.output_channel,
+                sequence=input_message.sequence + 1,
+                status="error",
+                confidence=0.0,
+                payload={
+                    "status": "error",
+                    "error_message": f"Agent 1 failed: {error_details}"
+                }
+            )
