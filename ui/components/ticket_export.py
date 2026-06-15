@@ -18,6 +18,8 @@ from utils.ticketing import (
     export_to_github,
     export_to_jira,
     remediation_to_markdown,
+    remediation_to_json,
+    remediation_to_csv,
 )
 
 
@@ -72,7 +74,7 @@ def render_ticket_export(
 
     st.divider()
     st.markdown("#### Export")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
 
     # GitHub.
     with col1:
@@ -118,6 +120,28 @@ def render_ticket_export(
             )
         else:
             st.caption("Install `reportlab` for PDF export.")
+
+    # JSON checklist download.
+    with col5:
+        js_data = remediation_to_json(plan, incident_ref)
+        st.download_button(
+            "Download checklist (.json)",
+            data=js_data,
+            file_name=f"remediation_{run_id[:8]}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    # CSV checklist download.
+    with col6:
+        csv_data = remediation_to_csv(plan, incident_ref)
+        st.download_button(
+            "Download checklist (.csv)",
+            data=csv_data,
+            file_name=f"remediation_{run_id[:8]}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
 
     if st.session_state.get("ticket_result"):
         st.divider()

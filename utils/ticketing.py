@@ -195,3 +195,45 @@ def remediation_to_markdown(remediation_plan: List[Dict[str, Any]], incident_ref
         lines.append(f"- [ ] {item.get('verification_method', '')}")
         lines.append("")
     return "\n".join(lines)
+
+
+def remediation_to_json(remediation_plan: List[Dict[str, Any]], incident_ref: str) -> str:
+    """Serialize the remediation plan to JSON format."""
+    import json
+    data = {
+        "incident_ref": incident_ref,
+        "remediation_plan": remediation_plan
+    }
+    return json.dumps(data, indent=2)
+
+
+def remediation_to_csv(remediation_plan: List[Dict[str, Any]], incident_ref: str) -> str:
+    """Serialize the remediation plan to CSV format."""
+    import io
+    import csv
+    output = io.StringIO()
+    fieldnames = [
+        "action_id",
+        "priority",
+        "category",
+        "title",
+        "description",
+        "owner",
+        "estimated_effort",
+        "verification_method"
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for item in remediation_plan:
+        writer.writerow({
+            "action_id": item.get("action_id", ""),
+            "priority": item.get("priority", ""),
+            "category": item.get("category", ""),
+            "title": item.get("title", ""),
+            "description": item.get("description", ""),
+            "owner": item.get("owner", ""),
+            "estimated_effort": item.get("estimated_effort", ""),
+            "verification_method": item.get("verification_method", "")
+        })
+    return output.getvalue()
+

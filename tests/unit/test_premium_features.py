@@ -130,3 +130,42 @@ def test_remediation_to_markdown():
     assert "# Remediation Plan — incident-123" in md
     assert "Rotate key" in md
     assert "- [ ] Key no longer valid" in md
+
+
+def test_remediation_to_json_and_csv():
+    from utils.ticketing import remediation_to_json, remediation_to_csv
+    import json
+    import csv
+
+    plan = [{
+        "action_id": "REM-001",
+        "priority": "immediate",
+        "category": "access_control",
+        "title": "Rotate key",
+        "description": "Rotate the leaked key",
+        "owner": "secops",
+        "estimated_effort": "1h",
+        "verification_method": "Key no longer valid"
+    }]
+    
+    # Test JSON Exporter
+    js = remediation_to_json(plan, "incident-123")
+    data = json.loads(js)
+    assert data["incident_ref"] == "incident-123"
+    assert data["remediation_plan"][0]["title"] == "Rotate key"
+    assert data["remediation_plan"][0]["action_id"] == "REM-001"
+
+    # Test CSV Exporter
+    csv_str = remediation_to_csv(plan, "incident-123")
+    reader = csv.DictReader(csv_str.splitlines())
+    rows = list(reader)
+    assert len(rows) == 1
+    assert rows[0]["action_id"] == "REM-001"
+    assert rows[0]["priority"] == "immediate"
+    assert rows[0]["category"] == "access_control"
+    assert rows[0]["title"] == "Rotate key"
+    assert rows[0]["description"] == "Rotate the leaked key"
+    assert rows[0]["owner"] == "secops"
+    assert rows[0]["estimated_effort"] == "1h"
+    assert rows[0]["verification_method"] == "Key no longer valid"
+

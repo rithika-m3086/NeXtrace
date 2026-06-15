@@ -156,6 +156,8 @@ async def _run_pipeline_with_live_log(
     monitor: BandStatusMonitor,
     log_placeholder: st.delta_generator.DeltaGenerator,
     alert_placeholder: st.delta_generator.DeltaGenerator,
+    resume_run_id: Optional[str] = None,
+    stop_after: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute the pipeline while refreshing the Band status log."""
 
@@ -189,6 +191,8 @@ async def _run_pipeline_with_live_log(
             log_sources,
             timeout_seconds=timeout_seconds,
             metadata=metadata,
+            resume_run_id=resume_run_id,
+            stop_after=stop_after,
         )
     finally:
         refresh_task.cancel()
@@ -214,6 +218,8 @@ def _run_investigation(
     uploaded_files: Optional[List[Any]] = None,
     pasted_content: str = "",
     pasted_source_name: str = "pasted_logs",
+    resume_run_id: Optional[str] = None,
+    stop_after: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Synchronous wrapper that runs the async pipeline on a dedicated event loop."""
     client = BandClient()
@@ -225,12 +231,15 @@ def _run_investigation(
     monitor.subscribe()
     monitor.add_orchestrator_start()
 
-    if input_mode == "Sample Scenario":
-        log_sources = _load_scenario_log_sources(scenario)
+    if resume_run_id:
+        log_sources = []
     else:
-        log_sources = _load_custom_log_sources(
-            input_mode, uploaded_files, pasted_content, pasted_source_name
-        )
+        if input_mode == "Sample Scenario":
+            log_sources = _load_scenario_log_sources(scenario)
+        else:
+            log_sources = _load_custom_log_sources(
+                input_mode, uploaded_files, pasted_content, pasted_source_name
+            )
     metadata = _build_metadata(org_name, enable_soc2, enable_hipaa)
 
     loop = asyncio.new_event_loop()
@@ -245,6 +254,8 @@ def _run_investigation(
                 monitor,
                 log_placeholder,
                 alert_placeholder,
+                resume_run_id=resume_run_id,
+                stop_after=stop_after,
             )
         )
     finally:
@@ -267,6 +278,31 @@ def main() -> None:
 
     with st.sidebar:
         _render_band_mode_badge()
+
+        # Resume Controls
+        state_mgr = PipelineStateManager()
+        saved_runs = state_mgr.list_saved_runs()
+        resume_run_id = None
+        resume_clicked = False
+        if saved_runs:
+            st.subheader("Resume Investigation")
+            options = ["-- Select a run --"] + list(saved_runs.keys())
+            def format_run_option(opt):
+                if opt == "-- Select a run --":
+                    return opt
+                stage = saved_runs.get(opt, "none")
+                return f"{opt[:8]}... ({stage})"
+            selected_resume = st.selectbox(
+                "Resume last failed run",
+                options=options,
+                format_func=format_run_option,
+                key="resume_run_id_select"
+            )
+            if selected_resume != "-- Select a run --":
+                resume_run_id = selected_resume
+                resume_clicked = st.button("Resume Selected Run", type="primary", use_container_width=True)
+                st.divider()
+
         st.header("Investigation Controls")
         org_name = st.text_input("Organization name", value="Acme Corp")
         scenario = st.selectbox("Scenario", options=list(SCENARIOS.keys()))
@@ -296,6 +332,10 @@ def main() -> None:
         enable_soc2 = st.toggle("SOC 2 certified organization", value=True)
         enable_hipaa = st.toggle("HIPAA covered entity", value=True)
         timeout_seconds = st.slider("Pipeline timeout (seconds)", min_value=60, max_value=600, value=200, step=10)
+
+        # Staged review toggle
+        skip_review = st.toggle("Skip review / run straight through", value=True)
+
         run_clicked = st.button("Run Investigation", type="primary", use_container_width=True)
 
     st.subheader("Live Band Coordination Log")
@@ -305,14 +345,16 @@ def main() -> None:
     if st.session_state.status_log_html and not st.session_state.investigation_running:
         log_placeholder.markdown(st.session_state.status_log_html, unsafe_allow_html=True)
 
-    if run_clicked and not st.session_state.investigation_running:
+    is_triggered = (run_clicked or resume_clicked) and not st.session_state.investigation_running
+    if is_triggered:
         has_error = False
-        if input_mode == "Upload Logs" and not uploaded_files:
-            st.warning("Please provide log input before running.")
-            has_error = True
-        elif input_mode == "Paste Logs" and not pasted_content.strip():
-            st.warning("Please provide log input before running.")
-            has_error = True
+        if not resume_clicked:
+            if input_mode == "Upload Logs" and not uploaded_files:
+                st.warning("Please provide log input before running.")
+                has_error = True
+            elif input_mode == "Paste Logs" and not pasted_content.strip():
+                st.warning("Please provide log input before running.")
+                has_error = True
 
         if not has_error:
             st.session_state.investigation_running = True
@@ -321,6 +363,7 @@ def main() -> None:
 
             with st.spinner("Investigation in progress — agents coordinating over Band…"):
                 try:
+                    stop_after = "forensic_timeline" if (not skip_review and not resume_clicked) else None
                     result = _run_investigation(
                         org_name=org_name,
                         scenario=scenario,
@@ -333,6 +376,8 @@ def main() -> None:
                         uploaded_files=uploaded_files,
                         pasted_content=pasted_content,
                         pasted_source_name=pasted_source_name,
+                        resume_run_id=resume_run_id if resume_clicked else None,
+                        stop_after=stop_after,
                     )
                     st.session_state.pipeline_result = result
                     st.session_state.last_run_id = result.get("run_id")
@@ -358,6 +403,135 @@ def main() -> None:
             st.warning(f"Pipeline timed out · Run ID `{run_id}` — {result.get('error')}")
         elif status == "failed":
             st.error(f"Investigation failed · {result.get('error')}")
+        elif status == "paused":
+            st.warning(f"Investigation paused for review · Run ID `{run_id}`")
+            stages = result.get("stages", {})
+            timeline_data = stages.get("forensic_timeline")
+            
+            if timeline_data:
+                st.markdown("### Forensic Timeline Editor")
+                st.info("The investigation is paused. Edit the timeline events below, then click **Continue Investigation**.")
+                
+                events = timeline_data.get("events", [])
+                editor_key = f"timeline_editor_data_{run_id}"
+                if editor_key not in st.session_state:
+                    st.session_state[editor_key] = [
+                        {
+                            "keep": True,
+                            "confirmed_malicious": "confirmed_malicious" in ev.get("flags", []),
+                            "timestamp": ev.get("timestamp"),
+                            "severity": ev.get("severity"),
+                            "event_type": ev.get("event_type"),
+                            "action": ev.get("action"),
+                            "target_resource": ev.get("target_resource"),
+                            "outcome": ev.get("outcome"),
+                            "source_ip": ev.get("source_ip"),
+                            "source_user": ev.get("source_user"),
+                            "event_id": ev.get("event_id"),
+                            "raw_log_reference": ev.get("raw_log_reference"),
+                            "flags": ev.get("flags", []),
+                        }
+                        for ev in events
+                    ]
+                
+                edited_rows = st.data_editor(
+                    st.session_state[editor_key],
+                    key=f"timeline_editor_control_{run_id}",
+                    column_config={
+                        "keep": st.column_config.CheckboxColumn("Keep?", default=True),
+                        "confirmed_malicious": st.column_config.CheckboxColumn("Confirmed Malicious?", default=False),
+                        "event_id": st.column_config.TextColumn("Event ID", disabled=True),
+                        "raw_log_reference": st.column_config.TextColumn("Raw Log Ref", disabled=True),
+                        "flags": st.column_config.ListColumn("Flags", disabled=True),
+                    },
+                    use_container_width=True,
+                    num_rows="dynamic"
+                )
+                
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    if st.button("Continue Investigation", type="primary", use_container_width=True):
+                        try:
+                            cleaned_events = []
+                            for ev in edited_rows:
+                                if not ev.get("keep", True):
+                                    continue
+                                cleaned_ev = {k: v for k, v in ev.items() if k not in ("keep", "confirmed_malicious")}
+                                flags = list(ev.get("flags", []))
+                                if ev.get("confirmed_malicious"):
+                                    if "confirmed_malicious" not in flags:
+                                        flags.append("confirmed_malicious")
+                                else:
+                                    if "confirmed_malicious" in flags:
+                                        flags.remove("confirmed_malicious")
+                                cleaned_ev["flags"] = flags
+                                cleaned_events.append(cleaned_ev)
+                                
+                            if not cleaned_events:
+                                st.error("Cannot continue with an empty timeline. Please keep at least one event.")
+                            else:
+                                from schemas.timeline_schema import ForensicTimeline
+                                timeline_payload = {
+                                    "incident_id": timeline_data.get("incident_id"),
+                                    "pipeline_run_id": run_id,
+                                    "created_at": timeline_data.get("created_at"),
+                                    "confidence_score": timeline_data.get("confidence_score", 1.0),
+                                    "raw_event_count": timeline_data.get("raw_event_count", len(cleaned_events)),
+                                    "filtered_event_count": len(cleaned_events),
+                                    "timeline_start": cleaned_events[0]["timestamp"] if cleaned_events else timeline_data.get("timeline_start"),
+                                    "timeline_end": cleaned_events[-1]["timestamp"] if cleaned_events else timeline_data.get("timeline_end"),
+                                    "events": cleaned_events,
+                                    "affected_systems": list(set(ev["target_resource"] for ev in cleaned_events if ev.get("target_resource"))),
+                                    "affected_users": list(set(ev["source_user"] for ev in cleaned_events if ev.get("source_user"))),
+                                    "anomalies": timeline_data.get("anomalies", []),
+                                    "agent_notes": timeline_data.get("agent_notes", "")
+                                }
+                                
+                                validated = ForensicTimeline.model_validate(timeline_payload)
+                                new_payload = validated.model_dump(mode="json")
+                                
+                                import os
+                                import json
+                                filepath = os.path.join("outputs", f"{run_id}.json")
+                                if os.path.exists(filepath):
+                                    with open(filepath, "r", encoding="utf-8") as f:
+                                        state_json = json.load(f)
+                                else:
+                                    state_json = {"stages": {}, "status": "in_progress"}
+                                
+                                state_json["stages"]["forensic_timeline"] = new_payload
+                                state_json["status"] = "in_progress"
+                                
+                                os.makedirs("outputs", exist_ok=True)
+                                with open(filepath, "w", encoding="utf-8") as f:
+                                    json.dump(state_json, f, indent=2)
+                                    
+                                if editor_key in st.session_state:
+                                    del st.session_state[editor_key]
+                                    
+                                st.session_state.investigation_running = True
+                                st.session_state.pipeline_result = None
+                                st.session_state.status_log_html = None
+                                
+                                with st.spinner("Continuing investigation..."):
+                                    res = _run_investigation(
+                                        org_name=org_name,
+                                        scenario=scenario,
+                                        enable_soc2=enable_soc2,
+                                        enable_hipaa=enable_hipaa,
+                                        timeout_seconds=timeout_seconds,
+                                        log_placeholder=log_placeholder,
+                                        alert_placeholder=alert_placeholder,
+                                        input_mode=input_mode,
+                                        resume_run_id=run_id,
+                                    )
+                                    st.session_state.pipeline_result = res
+                                    st.session_state.last_run_id = res.get("run_id")
+                                
+                                st.session_state.investigation_running = False
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to validate timeline edits: {e}")
 
         stages = result.get("stages", {})
 

@@ -1,14 +1,22 @@
 from abc import ABC, abstractmethod
 import json
 import os
+import re
 import time
 from typing import Any, Dict, Optional, Type
-from openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 from pydantic import BaseModel, ValidationError
 
 from core.client import BandClient
 from core.message_types import BandMessage
 from utils.logger import get_logger
+
+_PROVIDER_CLIENTS = {}
 
 
 class BaseAgent(ABC):
@@ -31,27 +39,107 @@ class BaseAgent(ABC):
         # Initialize OpenAI client for OpenRouter or AIML API
         self.openai_client = self._init_openai_client()
 
-    def _init_openai_client(self) -> Optional[OpenAI]:
-        """Configures OpenAI client using OpenRouter or AIML API based on env variables."""
+    def _get_default_provider(self) -> str:
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
         aiml_key = os.getenv("AIML_API_KEY")
-
         if openrouter_key and not openrouter_key.startswith("your_"):
-            self.logger.info("BaseAgent: Configuring LLM client for OpenRouter")
-            return OpenAI(
-                api_key=openrouter_key,
-                base_url="https://openrouter.ai/api/v1",
-            )
+            return "openrouter"
         elif aiml_key and not aiml_key.startswith("your_"):
-            self.logger.info("BaseAgent: Configuring LLM client for AIML API")
-            return OpenAI(
-                api_key=aiml_key,
-                base_url="https://api.aimlapi.com/v1",
-            )
-        else:
-            # Fallback placeholder to prevent crashes if credentials aren't loaded yet
-            self.logger.warning("BaseAgent: No LLM credentials configured. Calls will fail.")
+            return "aiml"
+        return "openrouter"
+
+    def _has_key(self, provider: str) -> bool:
+        if provider == "openrouter":
+            k = os.getenv("OPENROUTER_API_KEY")
+            return bool(k and not k.startswith("your_"))
+        elif provider == "aiml":
+            k = os.getenv("AIML_API_KEY")
+            return bool(k and not k.startswith("your_"))
+        elif provider == "featherless":
+            k = os.getenv("FEATHERLESS_API_KEY")
+            return bool(k and not k.startswith("your_"))
+        return False
+
+    def _get_client_for_provider(self, provider: str) -> Optional[OpenAI]:
+        global _PROVIDER_CLIENTS
+        if provider in _PROVIDER_CLIENTS:
+            return _PROVIDER_CLIENTS[provider]
+
+        if OpenAI is None:
+            self.logger.warning(f"BaseAgent: 'openai' package not installed. Cannot instantiate OpenAI client.")
             return None
+
+        client = None
+        if provider == "openrouter":
+            key = os.getenv("OPENROUTER_API_KEY")
+            if key and not key.startswith("your_"):
+                self.logger.info("BaseAgent: Configuring LLM client for OpenRouter")
+                client = OpenAI(
+                    api_key=key,
+                    base_url="https://openrouter.ai/api/v1",
+                )
+        elif provider == "aiml":
+            key = os.getenv("AIML_API_KEY")
+            if key and not key.startswith("your_"):
+                self.logger.info("BaseAgent: Configuring LLM client for AIML API")
+                client = OpenAI(
+                    api_key=key,
+                    base_url="https://api.aimlapi.com/v1",
+                )
+        elif provider == "featherless":
+            key = os.getenv("FEATHERLESS_API_KEY")
+            if key and not key.startswith("your_"):
+                self.logger.info("BaseAgent: Configuring LLM client for Featherless")
+                client = OpenAI(
+                    api_key=key,
+                    base_url="https://api.featherless.ai/v1",
+                )
+
+        if client:
+            _PROVIDER_CLIENTS[provider] = client
+        return client
+
+    def _init_openai_client(self) -> Optional[OpenAI]:
+        """Configures OpenAI client using OpenRouter, AIML API, or Featherless based on env variables."""
+        mapping = {
+            "agent1_forensic": "AGENT1",
+            "agent2_attribution": "AGENT2",
+            "agent3_impact": "AGENT3",
+            "agent4_postmortem": "AGENT4"
+        }
+        self.agent_prefix = mapping.get(self.agent_id)
+
+        # Resolve provider
+        provider = None
+        if self.agent_prefix:
+            provider = os.getenv(f"{self.agent_prefix}_PROVIDER")
+        if not provider:
+            provider = self._get_default_provider()
+
+        # Check API key presence
+        if not self._has_key(provider):
+            default_p = self._get_default_provider()
+            self.logger.warning(
+                f"BaseAgent '{self.agent_id}': Provider '{provider}' API key is missing. "
+                f"Falling back to default provider '{default_p}'."
+            )
+            provider = default_p
+
+        self.provider = provider
+
+        # Resolve model
+        model = None
+        if self.agent_prefix:
+            model = os.getenv(f"{self.agent_prefix}_MODEL")
+        if not model:
+            model = os.getenv("MODEL_NAME", "anthropic/claude-3.5-sonnet")
+        self.model_name = model
+
+        if OpenAI is None:
+            self.logger.warning("BaseAgent: 'openai' package is not installed. LLM client is disabled.")
+            return None
+
+        return self._get_client_for_provider(self.provider)
 
     @abstractmethod
     async def process(self, input_message: BandMessage) -> BandMessage:
@@ -135,7 +223,22 @@ class BaseAgent(ABC):
         if not self.openai_client:
             raise ValueError("LLM Client is not configured. Check your env variables.")
 
-        model = os.getenv("MODEL_NAME", "anthropic/claude-3.5-sonnet")
+        agent_model_map = {
+            "agent1_forensic": os.getenv("AGENT1_MODEL"),
+            "agent2_attribution": os.getenv("AGENT2_MODEL"),
+            "agent3_impact": os.getenv("AGENT3_MODEL"),
+            "agent4_postmortem": os.getenv("AGENT4_MODEL"),
+        }
+        model = agent_model_map.get(self.agent_id) or os.getenv(
+            "MODEL_NAME", "meta-llama/llama-3-70b-instruct"
+        )
+
+        # Map model identifiers for AIML API compatibility
+        if getattr(self, "provider", None) == "aiml":
+            if model == "meta-llama/llama-3-70b-instruct":
+                model = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+            elif model == "anthropic/claude-3.5-sonnet":
+                model = "claude-sonnet-4-6"
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -159,7 +262,7 @@ class BaseAgent(ABC):
                     messages=messages,
                     temperature=0.1,
                     estimated_tokens=estimated_tokens,
-                    timeout=15.0,
+                    timeout=60.0,
                 )
                 return response.choices[0].message.content or ""
             except Exception as e:
@@ -190,6 +293,29 @@ class BaseAgent(ABC):
                     raise e
                 time.sleep(1.0)
 
+    def _sanitize_json_arithmetic(self, json_str: str) -> str:
+        """Evaluates simple arithmetic expressions in raw JSON values (e.g. confidence scores)."""
+        def eval_match(m):
+            expr = m.group(1)
+            try:
+                # Safely evaluate simple arithmetic expressions
+                if re.match(r'^[0-9.\s+\-*/()]+$', expr):
+                    val = eval(expr, {"__builtins__": None}, {})
+                    # Clamp confidence values if they exceed 1.0
+                    if "confidence" in m.group(0).lower() and val > 1.0:
+                        val = 0.95
+                    return f': {val}'
+            except Exception:
+                pass
+            return m.group(0)
+
+        # Match ': ' followed by numbers combined with arithmetic operators (+, -, *, /)
+        pattern = r':\s*([0-9]+(?:\.[0-9]+)?(?:\s*[+\-*/]\s*[0-9]+(?:\.[0-9]+)?)+)'
+        json_str = re.sub(pattern, eval_match, json_str)
+        # Also clean up "users_affected_count": -1 to 0 since Pydantic requires ge=0
+        json_str = re.sub(r'"users_affected_count"\s*:\s*-1', '"users_affected_count": 0', json_str)
+        return json_str
+
     def _call_model_json(
         self,
         prompt: str,
@@ -207,7 +333,8 @@ class BaseAgent(ABC):
             f"\nYou MUST return raw JSON that strictly conforms to the following schema:\n"
             f"{schema_json}\n"
             "Do NOT include conversational text. Return ONLY the raw JSON string. "
-            "If using markdown formatting, use: ```json <json_content> ```"
+            "If using markdown formatting, use: ```json <json_content> ```\n"
+            "Ensure all numeric fields are final single numeric values (do NOT include arithmetic expressions like 0.85 + 0.1)."
         )
         
         full_system_prompt = (system_prompt or "") + schema_instruction
@@ -233,6 +360,9 @@ class BaseAgent(ABC):
             last_brace = cleaned.rfind("}")
             if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
                 cleaned = cleaned[first_brace:last_brace + 1]
+
+            # Evaluate any arithmetic expressions in JSON numeric values
+            cleaned = self._sanitize_json_arithmetic(cleaned)
 
             try:
                 # Parse JSON

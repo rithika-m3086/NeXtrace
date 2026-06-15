@@ -120,12 +120,12 @@ class PIIMasker:
             return raw.replace(group, token)
 
         for category, pattern in _PATTERNS:
-            def _sub(m: "re.Match[str]") -> str:
+            def _sub(m: "re.Match[str]", _cat: str = category) -> str:
                 raw = m.group(0)
                 group = m.group(1) if m.groups() else raw
-                if category == "CREDIT_CARD" and not _luhn_ok(group):
+                if _cat == "CREDIT_CARD" and not _luhn_ok(group):
                     return raw
-                return _replace(category, raw, group)
+                return _replace(_cat, raw, group)
 
             text = pattern.sub(_sub, text)
 

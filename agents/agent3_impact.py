@@ -29,12 +29,50 @@ class ImpactAssessmentAgent(BaseAgent):
         system_prompt = prompt_mod.get_system_prompt()
 
         # Call model with self-correcting schema validator
-        assessment: ImpactAssessment = self._call_model_json(
-            prompt=prompt,
-            response_model=ImpactAssessment,
-            system_prompt=system_prompt,
-            run_id=run_id,
-        )
+        try:
+            assessment: ImpactAssessment = self._call_model_json(
+                prompt=prompt,
+                response_model=ImpactAssessment,
+                system_prompt=system_prompt,
+                run_id=run_id,
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"Agent 3 model validation failed: {e}. Attempting fallback for sparse/malformed logs.",
+                extra={"pipeline_run_id": run_id}
+            )
+            from datetime import datetime, timezone
+            from schemas.impact_schema import BlastRadius, BusinessImpact, RootCauseFactor
+            now = datetime.now(timezone.utc)
+            assessment = ImpactAssessment(
+                pipeline_run_id=run_id,
+                created_at=now,
+                confidence_score=0.1,
+                blast_radius=BlastRadius(
+                    systems_compromised=["unknown"],
+                    systems_compromised_count=0,
+                    users_affected=[],
+                    users_affected_count=0,
+                    estimated_records_exposed=-1,
+                    data_categories_exposed=["unknown"]
+                ),
+                business_impact=BusinessImpact(
+                    severity="low",
+                    estimated_downtime_minutes=0,
+                    revenue_impact="none",
+                    reputational_risk="low",
+                    description="No significant business impact detected due to lack of evidence."
+                ),
+                compliance_flags=[],
+                root_cause_factors=[
+                    RootCauseFactor(
+                        factor="Insufficient log data or malformed evidence",
+                        category="process",
+                        contributing_weight="minor"
+                    )
+                ],
+                agent_notes="Failed to generate impact assessment from sparse/malformed inputs."
+            )
 
         # Retrieve organization metadata from raw evidence input
         raw_input = self.state_manager.get_stage(run_id, "raw_evidence_input") or {}

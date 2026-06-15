@@ -69,3 +69,65 @@ class PipelineStateManager:
         """Returns all details of a run for debugging/inspection."""
         with self._lock:
             return self._states.get(run_id)
+
+    def save_to_disk(self, run_id: str):
+        """Saves the active run's state to disk under outputs/<run_id>.json."""
+        import json
+        import os
+        with self._lock:
+            state = self._states.get(run_id)
+            if not state:
+                return
+        os.makedirs("outputs", exist_ok=True)
+        file_path = os.path.join("outputs", f"{run_id}.json")
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+
+    def load_from_disk(self, run_id: str) -> bool:
+        """Loads a run's state from outputs/<run_id>.json if it exists."""
+        import json
+        import os
+        file_path = os.path.join("outputs", f"{run_id}.json")
+        if not os.path.exists(file_path):
+            return False
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            with self._lock:
+                self._states[run_id] = state
+            return True
+        except Exception:
+            return False
+
+    def list_saved_runs(self) -> Dict[str, str]:
+        """Scans outputs/ directory and returns mapping of run_id -> last completed stage."""
+        import os
+        import json
+        runs = {}
+        if not os.path.exists("outputs"):
+            return runs
+        for filename in os.listdir("outputs"):
+            if filename.endswith(".json"):
+                run_id = filename[:-5]
+                try:
+                    with open(os.path.join("outputs", filename), "r", encoding="utf-8") as f:
+                        state = json.load(f)
+                    stages = state.get("stages", {})
+                    # Determine last completed stage
+                    stage_order = [
+                        "postmortem_complete",
+                        "impact_assessment",
+                        "attack_attribution",
+                        "forensic_timeline",
+                        "raw_evidence_input",
+                    ]
+                    last_stage = "none"
+                    for s in stage_order:
+                        if s in stages:
+                            last_stage = s
+                            break
+                    runs[run_id] = last_stage
+                except Exception:
+                    continue
+        return runs
+

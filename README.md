@@ -157,6 +157,15 @@ AIML_API_KEY=your_aiml_api_key_here
 MODEL_NAME=anthropic/claude-3.5-sonnet
 ```
 
+**Per-Agent Provider & Model Overrides (Hybrid Routing):**
+Configure specific agents to utilize different providers (e.g. `aiml`, `featherless`, or `openrouter`) and model IDs:
+```env
+AGENT1_PROVIDER=featherless
+AGENT1_MODEL=meta-llama/llama-3-70b-instruct
+FEATHERLESS_API_KEY=your_featherless_api_key_here
+```
+
+
 **Live Band coordination** — register 4 agents + a room at [app.band.ai](https://app.band.ai), then add:
 ```env
 BAND_ROOM_ID=...
@@ -212,7 +221,7 @@ NeXtrace/
 │   ├── components/          # band_status · summary_view · attack_map · ticket_export · *_view
 │   └── styles/theme.py      # dark security-console theme
 ├── scripts/
-│   ├── run_scenario.py      # CLI E2E runner
+│   ├── run_o.py      # CLI E2E runner
 │   └── verify_band.py       # live Band credential / room verifier
 ├── data/sample_logs/        # correlated attack fixtures + edge cases
 └── tests/                   # 44 unit + integration tests
