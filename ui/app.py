@@ -135,16 +135,20 @@ def _render_band_mode_badge() -> None:
     """Show whether the app is coordinating over live Band or the local simulator."""
     live = is_live_configured()
     if live:
-        color, label, detail = COLORS["success"], "LIVE · Band", "Agents coordinating through a Band chat room"
+        color, label, detail = COLORS["live"], "LIVE · Band", "Agents coordinating through a Band chat room"
+        anim = "nx-glow-pulse 1.6s var(--nx-ease-inout) infinite"
     else:
-        color, label, detail = COLORS["warning"], "MOCK · Local bus", "Offline simulator (set Band creds for live mode)"
+        color, label, detail = COLORS["mock"], "MOCK · Local bus", "Offline simulator (set Band creds for live mode)"
+        anim = "nx-glow-pulse-mock 1.6s var(--nx-ease-inout) infinite"
     st.markdown(
-        f'<div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;'
-        f'border:1px solid {color}55;border-radius:8px;background:{color}14;margin-bottom:0.75rem;">'
+        f'<div style="display:flex;align-items:center;gap:0.6rem;padding:0.55rem 0.8rem;'
+        f'border:1px solid {color}55;border-radius:var(--nx-radius-lg);background:{color}14;'
+        f'margin-bottom:0.85rem;box-shadow:var(--nx-shadow-sm);">'
         f'<span style="width:9px;height:9px;border-radius:50%;background:{color};'
-        f'box-shadow:0 0 8px {color};"></span>'
-        f'<div><div style="font-family:monospace;font-weight:600;color:{color};font-size:0.8rem;">'
-        f'{label}</div><div style="font-size:0.68rem;color:#8b949e;">{detail}</div></div></div>',
+        f'flex-shrink:0;box-shadow:0 0 8px {color};animation:{anim};"></span>'
+        f'<div style="line-height:1.3;"><div style="font-family:var(--nx-font-mono);font-weight:600;'
+        f'color:{color};font-size:0.8rem;">{label}</div>'
+        f'<div style="font-size:0.68rem;color:var(--nx-text-secondary);">{detail}</div></div></div>',
         unsafe_allow_html=True,
     )
 
