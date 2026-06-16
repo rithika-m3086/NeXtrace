@@ -53,16 +53,18 @@ async def test_llm_double_timeout_fatal():
     agent.openai_client = MagicMock()
     
     mock_create = agent.openai_client.chat.completions.create
+    # Retries are consolidated in call_with_retry (RETRY_MAX_ATTEMPTS = 3).
     mock_create.side_effect = [
         Exception("Request timed out"),
-        Exception("Request timed out")
+        Exception("Request timed out"),
+        Exception("Request timed out"),
     ]
-    
-    # Verify that it raises the exception after 2 attempts
+
+    # Verify the original exception propagates after all attempts are exhausted.
     with patch("time.sleep", return_value=None):
         with pytest.raises(Exception, match="Request timed out"):
             agent._call_model(prompt="test prompt", run_id="run-123")
-        assert mock_create.call_count == 2
+        assert mock_create.call_count == 3
 
 # Test 3: Sparse logs degradation
 # We assert that when sparse logs are analyzed, the pipeline outputs lower confidence

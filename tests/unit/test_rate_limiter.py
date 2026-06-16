@@ -96,5 +96,7 @@ def test_call_with_retry_exhausted(monkeypatch):
     def mock_fn():
         raise MockRateLimitError("Always 429")
         
-    with pytest.raises(RuntimeError, match="Rate limit retry attempts exhausted"):
+    # After all retry attempts are exhausted, the original transient exception
+    # is re-raised (so callers see the real error, not a generic wrapper).
+    with pytest.raises(MockRateLimitError, match="Always 429"):
         call_with_retry(mock_fn, estimated_tokens=10)

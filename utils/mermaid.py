@@ -71,7 +71,9 @@ def build_attack_flow(attribution: Optional[Dict[str, Any]]) -> Optional[str]:
         tech_id = raw.get("mitre_technique_id", "")
         desc = _sanitize(raw.get("description") or raw.get("mitre_technique_name") or tactic)
         tactic_label = _sanitize(raw.get("mitre_tactic") or "", 28)
-        label = f"{tactic_label}<br/>{desc}<br/><small>{tech_id}</small>"
+        # htmlLabels (enabled via securityLevel:'loose' in mermaid_html) supports
+        # <br/> and <b>; avoid <small>, which older mermaid parsers choke on.
+        label = f"<b>{tactic_label}</b><br/>{desc}<br/>{tech_id}"
         cls = _TACTIC_CLASS.get(tactic, "default")
         if cls in ("entry", "exfil", "impact"):
             node_classes[node_id] = cls
@@ -102,10 +104,19 @@ def mermaid_html(diagram: str, height: int = 360) -> str:
 <div class="mermaid-wrap" style="background:#0b1220;border-radius:12px;padding:12px;">
   <pre class="mermaid" style="background:transparent;">{safe}</pre>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script>
-  mermaid.initialize({{ startOnLoad: true, theme: 'dark',
-    themeVariables: {{ fontSize: '13px' }} }});
-  if (window.mermaid) {{ window.mermaid.run(); }}
-</script>
-"""
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({{
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'dark',
+    flowchart: {{ htmlLabels: true, curve: 'basis', useMaxWidth: true }},
+    themeVariables: {{ fontSize: '13px' }}
+  }});
+  try {{
+    await mermaid.run({{ querySelector: '.mermaid' }});
+  }} catch (e) {{
+    document.querySelector('.mermaid-wrap').insertAdjacentHTML(
+      'beforeend', '<div style="color:#f87171;font-size:12px;">Diagram render error: ' + e + '</div>');
+  }}
+</script>"""
