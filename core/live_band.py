@@ -123,7 +123,7 @@ def decode_envelope(content: str) -> Optional[Dict[str, Any]]:
 
 def _import_sdk():
     try:
-        from thenvoi_rest import (  # type: ignore
+        from band.client.rest import (  # type: ignore
             RestClient,
             ChatMessageRequest,
             ChatMessageRequestMentionsItem,
@@ -131,8 +131,8 @@ def _import_sdk():
         return RestClient, ChatMessageRequest, ChatMessageRequestMentionsItem
     except Exception as exc:  # noqa: BLE001
         raise BandClientError(
-            "thenvoi-sdk (thenvoi_rest) is not importable. Install it "
-            "(`pip install thenvoi-sdk`) to enable live Band mode.",
+            "band-sdk is not importable. Install it "
+            "(`pip install band-sdk`) to enable live Band mode.",
             exc,
         )
 
@@ -159,7 +159,7 @@ class LiveBandClient:
         RestClient, _, _ = self._sdk
         for name, c in self.creds.items():
             if name not in self._clients:
-                self._clients[name] = RestClient(api_key=c.api_key)
+                self._clients[name] = RestClient(api_key=c.api_key, base_url="https://app.band.ai")
 
     def _client_for(self, name: str):
         self._ensure_clients()
@@ -247,6 +247,9 @@ class LiveBandClient:
                     except Exception:  # noqa: BLE001
                         pass
             except Exception as exc:  # noqa: BLE001
+                if getattr(exc, "status_code", None) == 204:
+                    self._stop.wait(self.poll_interval)
+                    continue
                 self.logger.warning(f"[LIVE BAND] {name} poll error: {exc}")
                 self._stop.wait(self.poll_interval)
 

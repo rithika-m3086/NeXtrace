@@ -4,11 +4,9 @@ python-dotenv
 openai                 # client used against AI/ML API (partner provider) base_url
 
 # ── Band multi-agent coordination layer ─────────────────────────────────────
-# Official Band SDK (Thenvoi). Provides the `thenvoi` Agent class + WebSocket
-# transport (Phoenix Channels) used to send/receive messages through Band chat
-# rooms. (PyPI also publishes this as `band-sdk[langgraph]`; thenvoi-sdk is the
-# package this project pins and imports as `thenvoi`.)
-thenvoi-sdk>=0.2.11
+# Official Band SDK. Renamed from thenvoi-sdk in v1.0.0.
+# Imports from band.client.rest (RestClient, ChatMessageRequest, etc.)
+band-sdk>=1.0.0
 
 # ── UI ──────────────────────────────────────────────────────────────────────
 streamlit
