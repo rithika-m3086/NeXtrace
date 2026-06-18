@@ -1,0 +1,39 @@
+# Render Blueprint — deploys the NeXtrace Streamlit app as a web service.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# In the Render dashboard: New + → Blueprint → connect the rithika-m3086/NeXtrace
+# repo → Render reads this file → set the AIML_API_KEY secret → Apply.
+services:
+  - type: web
+    name: nextrace
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: "pip install -r requirements.txt"
+    # Streamlit must bind to Render's injected $PORT on 0.0.0.0 and run headless.
+    startCommand: >-
+      streamlit run ui/app.py
+      --server.port $PORT
+      --server.address 0.0.0.0
+      --server.headless true
+      --server.enableCORS false
+      --server.enableXsrfProtection false
+      --browser.gatherUsageStats false
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      # Pin Python to match .python-version (pydantic-core needs a stable runtime).
+      - key: PYTHON_VERSION
+        value: "3.13.4"
+      # Inference provider key — set as a SECRET in the dashboard, never committed.
+      - key: AIML_API_KEY
+        sync: false
+      - key: MODEL_NAME
+        value: "gpt-4o"
+      - key: PIPELINE_TIMEOUT_SECONDS
+        value: "200"
+      - key: LOG_LEVEL
+        value: "INFO"
+      # Band creds left unset → app runs in offline MOCK coordination mode.
+      # Add BAND_ROOM_ID + BAND_AGENT{1..4}_API_KEY/_ID secrets to go live.
