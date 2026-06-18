@@ -1,5 +1,8 @@
 import json
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("nextrace")
 
 MAX_CHARS_PER_SOURCE = 12000
 
@@ -128,20 +131,22 @@ def chunk_log_sources(log_sources: List[Dict]) -> List[Dict]:
                     new_source["content"] = truncated_content
                     chunked_sources.append(new_source)
                     continue
-
-            for i, chunk_content in enumerate(chunks, 1):
-                new_source = dict(source)
-                new_source["source_name"] = f"{source.get('source_name', 'unknown')}_chunk_{i}"
-                new_source["content"] = chunk_content
-                chunked_sources.append(new_source)
-
         else:
             chunks = chunk_plain_text(content)
-            for i, chunk_content in enumerate(chunks, 1):
-                new_source = dict(source)
-                new_source["source_name"] = f"{source.get('source_name', 'unknown')}_chunk_{i}"
-                new_source["content"] = chunk_content
-                chunked_sources.append(new_source)
+
+        MAX_ALLOWED_CHUNKS = 15
+        if len(chunks) > MAX_ALLOWED_CHUNKS:
+            logger.warning(
+                f"Log source truncated from {len(chunks)} to "
+                f"{MAX_ALLOWED_CHUNKS} chunks to protect API credits."
+            )
+            chunks = chunks[:MAX_ALLOWED_CHUNKS]
+
+        for i, chunk_content in enumerate(chunks, 1):
+            new_source = dict(source)
+            new_source["source_name"] = f"{source.get('source_name', 'unknown')}_chunk_{i}"
+            new_source["content"] = chunk_content
+            chunked_sources.append(new_source)
 
     return chunked_sources
 

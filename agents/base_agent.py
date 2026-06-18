@@ -383,8 +383,11 @@ class BaseAgent(ABC):
                 else:
                     # Log the final failure as error with the full raw response
                     self.logger.error(
-                        f"BaseAgent: JSON parsing/validation failed on attempt 2/2: {e}\n"
-                        f"Raw response was: {raw_response}"
+                        f"BaseAgent: JSON parsing/validation failed: {e}"
+                    )
+                    self.logger.debug(
+                        f"Raw response was: {raw_response[:200]}..."
+                        if len(raw_response) > 200 else raw_response
                     )
                     # Second failure raises error caught by run()
                     raise RuntimeError(f"BaseAgent: Failed to generate valid JSON schema for {response_model.__name__} after 2 attempts: {e}")

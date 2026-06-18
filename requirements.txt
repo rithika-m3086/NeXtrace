@@ -18,3 +18,6 @@ reportlab              # PDF incident report export
 # ── Tests ───────────────────────────────────────────────────────────────────
 pytest
 pytest-asyncio
+pytest-timeout
+pdfplumber
+

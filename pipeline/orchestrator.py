@@ -111,10 +111,7 @@ class PipelineOrchestrator:
                     "stages": self.state_manager.get_full_context(run_id),
                 }
 
-            # Initialize State Contexts
-            self.state_manager.create_run(run_id)
-            self.state_manager.update_stage(run_id, "raw_evidence_input", input_data.model_dump(mode="json"))
-            self.state_manager.save_to_disk(run_id)
+
 
         self.coordinator.start_pipeline_run(run_id, timeout_seconds=timeout_seconds)
 
@@ -291,6 +288,7 @@ class PipelineOrchestrator:
             )
 
             # Cache the preprocessed raw_evidence_input stage payload
+            self.state_manager.create_run(run_id)
             self.state_manager.update_stage(run_id, "raw_evidence_input", payload)
             self.state_manager.save_to_disk(run_id)
 

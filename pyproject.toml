@@ -15,7 +15,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "thenvoi-sdk>=0.2.11",
+    "band-sdk>=1.0.0",
     "pydantic>=2.0",
     "streamlit",
     "python-dotenv",

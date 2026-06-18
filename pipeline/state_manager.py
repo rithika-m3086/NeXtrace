@@ -74,14 +74,14 @@ class PipelineStateManager:
         """Saves the active run's state to disk under outputs/<run_id>.json."""
         import json
         import os
+        os.makedirs("outputs", exist_ok=True)
+        file_path = os.path.join("outputs", f"{run_id}.json")
         with self._lock:
             state = self._states.get(run_id)
             if not state:
                 return
-        os.makedirs("outputs", exist_ok=True)
-        file_path = os.path.join("outputs", f"{run_id}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, default=str)
 
     def load_from_disk(self, run_id: str) -> bool:
         """Loads a run's state from outputs/<run_id>.json if it exists."""

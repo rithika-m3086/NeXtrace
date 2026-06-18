@@ -177,8 +177,28 @@ BAND_AGENT4_API_KEY=...   BAND_AGENT4_ID=...
 *(Optional)* `GITHUB_TOKEN` + `GITHUB_REPO` or `JIRA_*` enable one-click ticket export.
 
 > 🔒 **Never commit `.env`** (it's git-ignored). Rotate any key that has ever been committed.
+---
+
+## 🧪 Testing
+
+The testing suite contains unit, functional, accuracy, and robustness tests.
+
+```bash
+# Run all tests
+pytest
+
+# Run only fast unit tests
+pytest tests/unit/ -v
+
+# Run accuracy tests (requires real API key, takes 5-10 minutes)
+pytest tests/accuracy/ -v -s
+
+# Run with coverage
+pytest --cov=. --cov-report=html
+```
 
 ---
+
 
 ## 🧰 Tech stack
 

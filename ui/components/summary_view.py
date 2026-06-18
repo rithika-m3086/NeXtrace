@@ -61,11 +61,11 @@ def render_incident_summary(stages: Dict[str, Any]) -> Dict[str, Any]:
     # Secondary line: attack type, entry point, regulations.
     bits = []
     if summary.get("attack_type"):
-        bits.append(f"Attack: **{summary['attack_type'].replace('_', ' ')}**")
+        bits.append(f"Attack: **{html.escape(summary['attack_type'].replace('_', ' '))}**")
     if summary.get("entry_point"):
-        bits.append(f"Entry point: `{summary['entry_point']}`")
+        bits.append(f"Entry point: `{html.escape(summary['entry_point'])}`")
     if summary.get("compliance_regulations"):
-        regs = ", ".join(r for r in summary["compliance_regulations"] if r and r != "none")
+        regs = ", ".join(html.escape(r) for r in summary["compliance_regulations"] if r and r != "none")
         if regs:
             bits.append(f"Regulations: **{regs}**")
     if bits:

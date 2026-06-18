@@ -86,7 +86,14 @@ def _load_scenario_log_sources(scenario_key: str) -> List[LogSource]:
     sources: List[LogSource] = []
     for spec in SCENARIOS[scenario_key]:
         path = SAMPLE_LOGS_DIR / spec["file"]
-        content = path.read_text(encoding="utf-8")
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (IOError, OSError) as e:
+            st.error(
+                f"Failed to load scenario file "
+                f"'{spec['file']}': {e}"
+            )
+            return []
         sources.append(
             LogSource(
                 source_name=spec["source_name"],
@@ -107,6 +114,12 @@ def _load_custom_log_sources(
     if input_mode == "Upload Logs":
         if uploaded_files:
             for file in uploaded_files:
+                if file.size > 10 * 1024 * 1024:
+                    st.error(
+                        f"'{file.name}' exceeds 10MB limit. "
+                        f"Please upload a smaller file."
+                    )
+                    continue
                 source_name = Path(file.name).stem
                 content = file.read()
                 if isinstance(content, bytes):
@@ -413,10 +426,17 @@ def main() -> None:
                 except Exception as exc:
                     st.session_state.pipeline_result = {
                         "status": "failed",
-                        "error": str(exc),
+                        "error": "Investigation failed. See logs for details.",
                         "stages": {},
                     }
-                    st.error(f"Investigation failed: {exc}")
+                    import logging
+                    logging.getLogger("nextrace").error(
+                        f"Investigation failed", exc_info=True
+                    )
+                    st.error(
+                        "Investigation failed. Check the terminal logs "
+                        "for details."
+                    )
                 finally:
                     st.session_state.investigation_running = False
 

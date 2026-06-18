@@ -7,6 +7,7 @@ class MockUploadedFile:
     def __init__(self, name: str, content: bytes):
         self.name = name
         self.content = content
+        self.size = len(content)
 
     def read(self) -> bytes:
         return self.content

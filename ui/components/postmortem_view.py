@@ -103,3 +103,21 @@ def render_postmortem_view(stage_data: Optional[Dict[str, Any]]) -> None:
 
     if report.agent_notes:
         st.caption(f"Agent notes: {report.agent_notes}")
+
+    if st.button("Download PDF Report"):
+        import tempfile, os
+        from utils.pdf_exporter import generate_pdf_report
+        with tempfile.NamedTemporaryFile(
+            suffix=".pdf", delete=False
+        ) as tmp:
+            path = generate_pdf_report(
+                stage_data, tmp.name
+            )
+        with open(path, "rb") as f:
+            st.download_button(
+                label="Save PDF",
+                data=f.read(),
+                file_name="nextrace_report.pdf",
+                mime="application/pdf",
+            )
+
