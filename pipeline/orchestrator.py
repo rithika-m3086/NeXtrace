@@ -69,6 +69,10 @@ class PipelineOrchestrator:
         if not cached_stages:
             # Validate Input Schema
             try:
+                if raw_logs is None:
+                    raise ValueError(
+                        "raw_logs is None — no evidence was provided to the pipeline."
+                    )
                 if isinstance(raw_logs, list):
                     log_sources = raw_logs
                 else:

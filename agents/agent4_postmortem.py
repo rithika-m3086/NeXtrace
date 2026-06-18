@@ -1,5 +1,6 @@
 import json
 from agents.base_agent import BaseAgent
+from agents.fallbacks import postmortem_fallback
 from core.message_types import BandMessage
 from schemas.postmortem_schema import PostMortemReport
 from pipeline.state_manager import PipelineStateManager
@@ -93,18 +94,17 @@ class PostMortemAgent(BaseAgent):
             import traceback
             error_details = f"{type(e).__name__}: {e}"
             self.logger.error(
-                f"Agent 4 (PostMortemAgent) failed: {error_details}\n{traceback.format_exc()}",
+                f"Agent 4 (PostMortemAgent) failed: {error_details} — emitting degraded fallback post-mortem.\n{traceback.format_exc()}",
                 extra={"pipeline_run_id": run_id}
             )
+            # Graceful degradation: emit a low-confidence valid post-mortem so the
+            # run completes with a (clearly-degraded) report instead of failing.
             return BandMessage.create(
                 pipeline_run_id=run_id,
                 agent_id=self.agent_id,
                 channel=self.output_channel,
                 sequence=input_message.sequence + 1,
-                status="error",
-                confidence=0.0,
-                payload={
-                    "status": "error",
-                    "error_message": f"Agent 4 failed: {error_details}"
-                }
+                status="partial",
+                confidence=0.1,
+                payload=postmortem_fallback(run_id),
             )

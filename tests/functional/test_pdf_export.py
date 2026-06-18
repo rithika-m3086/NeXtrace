@@ -8,20 +8,38 @@ from utils.pdf_exporter import generate_pdf_report
 pytestmark = pytest.mark.functional
 
 @pytest.fixture(scope="module")
-def valid_postmortem_data(api_key_leak_logs):
-    """Run pipeline once to generate a valid postmortem_complete stage dict for PDF tests."""
+def valid_postmortem_data():
+    """Run pipeline once to generate a valid postmortem_complete stage dict for PDF tests.
+
+    Loads the sample logs directly (rather than via the function-scoped
+    ``api_key_leak_logs`` fixture) so this module-scoped fixture has no scope
+    mismatch and runs the pipeline only once for the whole module.
+    """
     from core.client import BandClient
     from core.coordinator import BandCoordinator
     from pipeline.state_manager import PipelineStateManager
     from pipeline.orchestrator import PipelineOrchestrator
+    from tests.conftest import SAMPLE_LOGS
     import asyncio
-    
+
+    logs = []
+    for filename in [
+        "api_key_leak_cloudtrail.json",
+        "api_key_leak_github_audit.json",
+        "api_key_leak_s3_access.json",
+    ]:
+        logs.append({
+            "source_name": filename.replace(".json", ""),
+            "source_type": "cloudtrail",
+            "content": (SAMPLE_LOGS / filename).read_text(encoding="utf-8"),
+        })
+
     client = BandClient()
     state = PipelineStateManager()
     coord = BandCoordinator(client)
     orch = PipelineOrchestrator(client, state, coord)
-    
-    result = asyncio.run(orch.run_pipeline(api_key_leak_logs))
+
+    result = asyncio.run(orch.run_pipeline(logs))
     assert result["status"] == "completed", f"Setup failed: {result.get('error')}"
     return result["stages"]["postmortem_complete"]
 

@@ -1,4 +1,5 @@
 from agents.base_agent import BaseAgent
+from agents.fallbacks import forensic_timeline_fallback
 from core.message_types import BandMessage
 from schemas.timeline_schema import ForensicTimeline
 import prompts.agent1_prompt as prompt_mod
@@ -63,18 +64,17 @@ class ForensicEvidenceAgent(BaseAgent):
             import traceback
             error_details = f"{type(e).__name__}: {e}"
             self.logger.error(
-                f"Agent 1 (ForensicEvidenceAgent) failed: {error_details}\n{traceback.format_exc()}",
+                f"Agent 1 (ForensicEvidenceAgent) failed: {error_details} — emitting degraded fallback timeline.\n{traceback.format_exc()}",
                 extra={"pipeline_run_id": input_message.pipeline_run_id}
             )
+            # Graceful degradation: emit a low-confidence valid timeline so the
+            # pipeline completes instead of hard-failing the whole run.
             return BandMessage.create(
                 pipeline_run_id=input_message.pipeline_run_id,
                 agent_id=self.agent_id,
                 channel=self.output_channel,
                 sequence=input_message.sequence + 1,
-                status="error",
-                confidence=0.0,
-                payload={
-                    "status": "error",
-                    "error_message": f"Agent 1 failed: {error_details}"
-                }
+                status="partial",
+                confidence=0.1,
+                payload=forensic_timeline_fallback(input_message.pipeline_run_id),
             )
