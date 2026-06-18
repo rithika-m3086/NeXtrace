@@ -166,6 +166,41 @@ def _render_band_mode_badge() -> None:
     )
 
 
+def _logo_svg(size: int = 26) -> str:
+    """Inline NeXtrace mark — a shield with a signal 'trace' line through it."""
+    return (
+        f'<svg width="{size}" height="{size}" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">'
+        '<path d="M16 3 L27 7 V15 C27 22.4 22 27.7 16 30 C10 27.7 5 22.4 5 15 V7 Z" '
+        'fill="#58a6ff14" stroke="#58a6ff" stroke-width="1.6"/>'
+        '<path d="M8.5 17 H12.3 L14.5 11.5 L17.8 21.5 L19.8 16 H23.5" '
+        'stroke="#58a6ff" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+        "</svg>"
+    )
+
+
+def _render_appbar() -> None:
+    """Branded product app-bar (replaces the bare Streamlit H1)."""
+    st.markdown(
+        '<div class="nx-appbar"><div class="nx-appbar-left">'
+        f'<span class="nx-logo">{_logo_svg(26)}</span>'
+        '<div><div class="nx-appbar-title">NeXtrace</div>'
+        '<div class="nx-appbar-sub">Security Incident Intelligence</div></div></div>'
+        '<span class="nx-appbar-chip">Band-coordinated · multi-agent pipeline</span>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_sidebar_brand() -> None:
+    st.markdown(
+        '<div class="nx-sb-brand">'
+        f'<span class="nx-sb-logo">{_logo_svg(20)}</span>'
+        '<div><div class="nx-sb-name">NeXtrace</div>'
+        '<div class="nx-sb-tag">Security Console</div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _build_metadata(org_name: str, enable_soc2: bool, enable_hipaa: bool) -> Dict[str, Any]:
     metadata: Dict[str, Any] = {
         "state": "CA",
@@ -304,10 +339,10 @@ def main() -> None:
     inject_theme()
     _init_session_state()
 
-    st.title("NeXtrace")
-    st.caption("Multi-agent security incident intelligence · Band-coordinated pipeline")
+    _render_appbar()
 
     with st.sidebar:
+        _render_sidebar_brand()
         _render_band_mode_badge()
 
         # Check API Keys and Model Config
@@ -645,7 +680,16 @@ def main() -> None:
         else:
             st.warning("No forensic timeline findings available due to Agent 1 (Forensic) failure.")
     elif not st.session_state.investigation_running:
-        st.info("Configure settings in the sidebar and click **Run Investigation** to start.")
+        st.markdown(
+            '<div class="nx-empty">'
+            '<div class="nx-empty-icon">🛰️</div>'
+            '<div class="nx-empty-title">No active investigation</div>'
+            '<div class="nx-empty-sub">Pick a scenario in the sidebar and run an investigation.<br/>'
+            'Four specialized agents will coordinate over Band to reconstruct the incident, '
+            'attribute it to MITRE ATT&amp;CK, assess compliance impact, and draft a blameless post-mortem.</div>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 
 if __name__ == "__main__":

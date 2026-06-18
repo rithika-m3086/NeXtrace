@@ -137,6 +137,88 @@ def inject_theme() -> None:
     }
     [data-testid="stSidebar"] .stMarkdown,
     [data-testid="stSidebar"] label { color: var(--nx-text-primary) !important; }
+    [data-testid="stSidebar"] > div { padding-top: 1.25rem; }
+    /* Sidebar section headers → refined uppercase eyebrows */
+    [data-testid="stSidebar"] h2 { font-size: 0.95rem !important; font-weight: 600 !important; }
+    [data-testid="stSidebar"] h3 {
+        font-size: 0.72rem !important;
+        text-transform: uppercase;
+        letter-spacing: var(--nx-tracking-wider);
+        color: var(--nx-text-secondary) !important;
+        margin-top: 0.5rem !important;
+    }
+
+    /* ── Hide Streamlit prototype chrome (Deploy btn, menu, footer, ribbon) ── */
+    [data-testid="stHeader"] { background: transparent !important; }
+    [data-testid="stToolbar"], [data-testid="stStatusWidget"],
+    #MainMenu, footer, [data-testid="stDecoration"] { display: none !important; }
+    /* Tighten content gutters now the top bar is gone */
+    .block-container, [data-testid="stMainBlockContainer"] {
+        padding-top: 2rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1400px;
+    }
+
+    /* ── Product app-bar (replaces the bare H1) ── */
+    .nx-appbar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; padding-bottom: 1rem; margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--nx-border);
+    }
+    .nx-appbar-left { display: flex; align-items: center; gap: 0.85rem; }
+    .nx-logo {
+        display: flex; align-items: center; justify-content: center;
+        width: 44px; height: 44px; border-radius: var(--nx-radius-lg);
+        background: var(--nx-accent-faint); border: 1px solid #58a6ff33;
+        box-shadow: var(--nx-shadow-sm); flex-shrink: 0;
+    }
+    .nx-appbar-title {
+        font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em;
+        line-height: 1.1; color: var(--nx-text-primary);
+    }
+    .nx-appbar-sub { font-size: 0.8rem; color: var(--nx-text-secondary); margin-top: 0.1rem; }
+    .nx-appbar-chip {
+        font-family: var(--nx-font-mono); font-size: 0.72rem; color: var(--nx-text-secondary);
+        border: 1px solid var(--nx-border); background: var(--nx-bg-panel);
+        padding: 0.35rem 0.75rem; border-radius: var(--nx-radius-full); white-space: nowrap;
+    }
+
+    /* ── Sidebar brand block ── */
+    .nx-sb-brand {
+        display: flex; align-items: center; gap: 0.6rem;
+        padding-bottom: 0.85rem; margin-bottom: 0.85rem;
+        border-bottom: 1px solid var(--nx-border-subtle);
+    }
+    .nx-sb-logo {
+        width: 32px; height: 32px; border-radius: var(--nx-radius-md);
+        background: var(--nx-accent-faint); border: 1px solid #58a6ff33;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .nx-sb-name { font-weight: 700; letter-spacing: -0.01em; font-size: 1rem; line-height: 1.1; }
+    .nx-sb-tag {
+        font-size: 0.65rem; color: var(--nx-text-muted); text-transform: uppercase;
+        letter-spacing: var(--nx-tracking-wide); margin-top: 0.1rem;
+    }
+
+    /* ── Section eyebrow (main area) ── */
+    .nx-eyebrow {
+        font-family: var(--nx-font-mono); font-size: 0.7rem; text-transform: uppercase;
+        letter-spacing: var(--nx-tracking-widest); color: var(--nx-text-secondary);
+        margin: 0.25rem 0 0.6rem 0;
+    }
+
+    /* ── Empty state ── */
+    .nx-empty {
+        border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-lg);
+        background: linear-gradient(180deg, var(--nx-bg-panel), var(--nx-bg-base));
+        padding: 3rem 2rem; text-align: center;
+    }
+    .nx-empty-icon { font-size: 1.9rem; opacity: 0.85; }
+    .nx-empty-title { font-weight: 600; font-size: 1.05rem; margin-top: 0.6rem; color: var(--nx-text-primary); }
+    .nx-empty-sub { font-size: 0.85rem; color: var(--nx-text-secondary); margin-top: 0.4rem; line-height: 1.6; }
+
+    /* ── Slider + radio accent polish ── */
+    [data-baseweb="slider"] [role="slider"] { background-color: var(--nx-accent) !important; }
 
     /* ── Metric cards ───────────────────────────────────────────────── */
     .nx-metric-card {
